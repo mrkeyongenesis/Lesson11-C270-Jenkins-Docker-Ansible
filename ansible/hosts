@@ -1,5 +1,5 @@
 [staging]
-staging ansible_host=localhost ansible_port=2211 ansible_user=root ansible_ssh_pass=root
+deploy-target-stag ansible_host=localhost ansible_port=2211 ansible_user=root ansible_ssh_pass=root
 
 [production]
 prod ansible_host=localhost ansible_port=2212 ansible_user=root ansible_ssh_pass=root

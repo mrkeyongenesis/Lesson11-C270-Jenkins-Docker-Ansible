@@ -103,6 +103,14 @@ Builds `student-backend` and `student-frontend` and pushes both. Paste your Dock
 > **Or automate this with Jenkins** (recommended) — see step 4. The included **`Jenkinsfile`** builds, tests, and pushes *both* images automatically on every commit, so you don't run this by hand.
 
 ### 3. Deploy across environments with Ansible
+This lab uses Ansible because deployment is more than just running a container locally. Ansible lets us define:
+- which hosts belong to **staging** and **production**,
+- how to connect to them over SSH,
+- which containers to run and when to update them,
+- and how to keep deployments repeatable and idempotent.
+
+The `ansible/hosts` file points at two local target containers: `deploy-target-stag` and `prod`. They behave like separate servers, so you can practice real environment promotion without needing remote machines.
+
 ```bash
 ./scripts/install_ansible.sh                       # one-time
 ./scripts/setup_environments.sh                    # spin up staging + production
@@ -111,6 +119,14 @@ cd ansible && ansible all -m ping && cd ..         # confirm connectivity
 ./scripts/deploy.sh <your-dockerhub-username> staging      # deploy to staging
 ./scripts/deploy.sh <your-dockerhub-username> production   # promote to production
 ```
+
+Before you deploy, you can inspect the staging target and see that the app is not yet running. For example:
+```bash
+docker exec -it deploy-target-stag bash -lc 'ls / && echo "No app deployed until Ansible runs"'
+```
+
+Then deploy to staging and refresh the UI/API ports to see the app appear. This makes it clear that Ansible is doing the work of configuring the target and launching the stack.
+
 Open the **PORTS** tab:
 - **8501** staging UI · **8001/docs** staging API
 - **8502** production UI · **8002/docs** production API

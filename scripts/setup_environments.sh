@@ -8,11 +8,39 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+cleanup_existing_targets() {
+  echo "🧹 Checking for containers using ports 2211/2212..."
+  local ports=(2211 2212)
+  local removed=()
+
+  for port in "${ports[@]}"; do
+    while IFS= read -r container; do
+      if [[ -n "$container" ]]; then
+        echo "    • Removing container using port $port: $container"
+        docker rm -f "$container" 2>/dev/null || true
+        removed+=("$container")
+      fi
+    done < <(docker ps -a --format '{{.Names}} {{.Ports}}' | grep -E "0\.0\.0\.0:$port|:$port->" | awk '{print $1}' || true)
+  done
+
+  for old in staging deploy-target-stag prod; do
+    if docker ps -a --format '{{.Names}}' | grep -xq "$old"; then
+      echo "    • Removing old container named $old"
+      docker rm -f "$old" 2>/dev/null || true
+      removed+=("$old")
+    fi
+  done
+
+  if [[ "${#removed[@]}" -gt 0 ]]; then
+    printf "✅ Removed containers: %s\n" "${removed[*]}"
+  fi
+}
+
 echo "🏗️  Building the deploy-target image..."
 docker build -t deploy-target:latest "$REPO_ROOT/ansible/target-image"
 
 echo "🧹 Removing any old environment containers..."
-docker rm -f deploy-target-stag prod 2>/dev/null || true
+cleanup_existing_targets
 
 echo "🚀 Starting STAGING  (SSH 2211, UI 8501->8501, API 8001->8000)..."
 docker run -d --rm --name deploy-target-stag --privileged \

@@ -127,6 +127,48 @@ Now every push triggers: **build backend → build frontend → test → push bo
 
 ---
 
+## A deeper hands-on path for students
+If you want to truly understand why each step exists, follow this sequence and compare the behavior at each stage.
+
+1. **Run the full stack locally and inspect it**
+   - `docker compose up --build`
+   - Open `localhost:8501` for the Streamlit UI and `localhost:8000/docs` for FastAPI.
+   - Confirm the UI calls the API and inspect the logs with `docker compose logs -f`.
+   - Stop it with `Ctrl+C`.
+
+2. **Use the smoke test script to verify the same flow automatically**
+   - `chmod 766 scripts/*`
+   - `./scripts/test_local.sh`
+   - Notice how this script builds both images, starts the services, runs a curl test, then cleans up.
+
+3. **Build and push the images manually**
+   - `./scripts/build_and_push.sh <your-dockerhub-username>`
+   - After pushing, run `docker images` and `docker ps -a` to see the new image tags.
+   - If you want, simulate a fresh environment by removing local containers and images, then `docker pull <your-dockerhub-username>/student-backend:latest`.
+
+4. **Deploy the stack with Ansible and compare environments**
+   - `./scripts/install_ansible.sh`
+   - `./scripts/setup_environments.sh`
+   - `cd ansible && ansible all -m ping && cd ..`
+   - `./scripts/deploy.sh <your-dockerhub-username> staging`
+   - Open the staging URLs and verify the app is running in a separate environment.
+   - `./scripts/deploy.sh <your-dockerhub-username> production`
+   - Compare staging and production port mappings and confirm the promotion path.
+
+5. **Inspect the pipeline and validate automation**
+   - Open `Jenkinsfile` and read the stages: build backend, build frontend, test, push.
+   - Make a small app change, commit, and push.
+   - Watch Jenkins run the pipeline and see the same steps happen automatically.
+   - Then redeploy the updated images with Ansible to complete the end-to-end flow.
+
+This deeper path helps you appreciate:
+- why local verification is the first and most important step,
+- why Docker images are the portable unit shared between CI and deployment,
+- why Jenkins is useful for repeatable automation,
+- and why Ansible is needed to deploy and promote a multi-tier stack across environments.
+
+---
+
 ## Learn the concepts
 
 - **[docs/JENKINS_PIPELINE.md](docs/JENKINS_PIPELINE.md)** — what CI/CD is, building a Jenkins pipeline that builds, tests, tags, and pushes an image to Docker Hub automatically on every code change.

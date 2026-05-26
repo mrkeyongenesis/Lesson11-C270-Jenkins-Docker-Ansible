@@ -89,6 +89,7 @@ Open the **PORTS** tab → port **8501** for the Streamlit UI, port **8000** (ad
 
 Or run the automated smoke test (builds both images, runs them, curls the API, cleans up):
 ```bash
+chmod 766 scripts/*
 ./scripts/test_local.sh
 ```
 **Only move on once the app works locally.** This is the golden rule: never build/push/deploy something you haven't run.

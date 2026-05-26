@@ -8,7 +8,7 @@ set -euo pipefail
 DH="${1:-}"
 if [ -z "$DH" ]; then
   echo "Usage: $0 <your-dockerhub-username>"
-  echo "Example: $0 mrkeyongenesis"
+  echo "Example: $0 yourname"
   exit 1
 fi
 

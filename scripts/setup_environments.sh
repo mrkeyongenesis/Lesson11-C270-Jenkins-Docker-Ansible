@@ -42,20 +42,37 @@ docker build -t deploy-target:latest "$REPO_ROOT/ansible/target-image"
 echo "🧹 Removing any old environment containers..."
 cleanup_existing_targets
 
+wait_for_target_docker() {
+  local name="$1"
+  local max=30
+  local count=0
+
+  echo "⏳ Waiting for Docker daemon inside $name..."
+  until docker exec "$name" docker version >/dev/null 2>&1; do
+    count=$((count + 1))
+    if [[ $count -ge $max ]]; then
+      echo "❌ Docker daemon did not become ready inside $name after $max seconds."
+      docker logs "$name" --tail 20
+      exit 1
+    fi
+    sleep 2
+  done
+  echo "✅ Docker daemon ready inside $name."
+}
+
 echo "🚀 Starting STAGING  (SSH 2211, UI 8501->8501, API 8001->8000)..."
 docker run -d --rm --name deploy-target-stag --privileged \
-  -v /var/run/docker.sock:/var/run/docker.sock \
   -p 2211:22 -p 8501:8501 -p 8001:8000 \
   deploy-target:latest
 
+wait_for_target_docker deploy-target-stag
+
 echo "🚀 Starting PRODUCTION (SSH 2212, UI 8502->8501, API 8002->8000)..."
 docker run -d --rm --name prod --privileged \
-  -v /var/run/docker.sock:/var/run/docker.sock \
   -p 2212:22 -p 8502:8501 -p 8002:8000 \
   deploy-target:latest
 
-echo "⏳ Waiting for the in-container Docker daemons to start..."
-sleep 8
+wait_for_target_docker prod
 
 echo ""
 echo "✅ Environments are up:"

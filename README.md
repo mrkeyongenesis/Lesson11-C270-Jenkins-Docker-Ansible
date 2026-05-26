@@ -111,7 +111,7 @@ This lab uses Ansible because deployment is more than just running a container l
 
 The `ansible/hosts` file points at two local target containers: `deploy-target-stag` and `prod`. They behave like separate servers, so you can practice real environment promotion without needing remote machines.
 
-The setup script now mounts the Docker socket into each target, which means Ansible can manage Docker from inside that target just like it would on a real server.
+Each target runs its own Docker daemon inside the container, so Ansible can manage app containers from within that isolated environment. The target maps its internal 8501/8000 ports out to different Codespace ports for staging and production.
 
 ```bash
 ./scripts/install_ansible.sh                       # one-time

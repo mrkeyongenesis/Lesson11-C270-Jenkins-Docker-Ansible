@@ -25,6 +25,18 @@
     ui_port: "{{ hostvars[inventory_hostname].ui_port | default(8501) }}"
 
   tasks:
+    - name: REMOVE OLD BACKEND CONTAINER IF IT EXISTS
+      community.docker.docker_container:
+        name: backend
+        state: absent
+      ignore_errors: true
+
+    - name: REMOVE OLD FRONTEND CONTAINER IF IT EXISTS
+      community.docker.docker_container:
+        name: frontend
+        state: absent
+      ignore_errors: true
+
     - name: CREATE A PRIVATE NETWORK FOR THE STACK
       community.docker.docker_network:
         name: appnet

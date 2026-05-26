@@ -1,3 +1,5 @@
+version: '3.8'
+
 # Run the whole app locally with one command:
 #   docker compose up --build
 # Then open port 8501 (UI) and 8000/docs (API) in the PORTS tab.

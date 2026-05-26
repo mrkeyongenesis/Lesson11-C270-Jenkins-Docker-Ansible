@@ -14,4 +14,6 @@ RUN mkdir -p /var/run/sshd && \
 EXPOSE 22 80
 
 # Start Docker daemon and the SSH server when the container runs
-CMD service docker start && /usr/sbin/sshd -D
+# Use a script to ensure both start properly with proper timing
+RUN echo '#!/bin/bash\nservice docker start\nsleep 2\n/usr/sbin/sshd -D' > /start.sh && chmod +x /start.sh
+CMD ["/start.sh"]

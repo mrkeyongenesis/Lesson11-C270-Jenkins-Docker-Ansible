@@ -44,11 +44,13 @@ cleanup_existing_targets
 
 echo "🚀 Starting STAGING  (SSH 2211, UI 8501->8501, API 8001->8000)..."
 docker run -d --rm --name deploy-target-stag --privileged \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -p 2211:22 -p 8501:8501 -p 8001:8000 \
   deploy-target:latest
 
 echo "🚀 Starting PRODUCTION (SSH 2212, UI 8502->8501, API 8002->8000)..."
 docker run -d --rm --name prod --privileged \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -p 2212:22 -p 8502:8501 -p 8002:8000 \
   deploy-target:latest
 

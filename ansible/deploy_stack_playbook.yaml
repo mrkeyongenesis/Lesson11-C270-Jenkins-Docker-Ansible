@@ -21,8 +21,8 @@
     backend_image:  "{{ dh_user }}/student-backend:latest"
     frontend_image: "{{ dh_user }}/student-frontend:latest"
     # Per-environment ports (can be overridden per-host)
-    api_port: "{{ api_port | default(8000) }}"
-    ui_port: "{{ ui_port | default(8501) }}"
+    api_port: "{{ hostvars[inventory_hostname].api_port | default(8000) }}"
+    ui_port: "{{ hostvars[inventory_hostname].ui_port | default(8501) }}"
 
   tasks:
     - name: CREATE A PRIVATE NETWORK FOR THE STACK

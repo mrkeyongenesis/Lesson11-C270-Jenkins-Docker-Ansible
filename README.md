@@ -104,28 +104,32 @@ Builds `student-backend` and `student-frontend` and pushes both. Paste your Dock
 
 ### 3. Deploy across environments with Ansible
 This lab uses Ansible because deployment is more than just running a container locally. Ansible lets us define:
-- which hosts belong to **staging** and **production**,
+- which hosts are in **staging** and **production**,
 - how to connect to them over SSH,
 - which containers to run and when to update them,
 - and how to keep deployments repeatable and idempotent.
 
 The `ansible/hosts` file points at two local target containers: `deploy-target-stag` and `prod`. They behave like separate servers, so you can practice real environment promotion without needing remote machines.
 
+The setup script now mounts the Docker socket into each target, which means Ansible can manage Docker from inside that target just like it would on a real server.
+
 ```bash
 ./scripts/install_ansible.sh                       # one-time
-./scripts/setup_environments.sh                    # spin up staging + production
+./scripts/setup_environments.sh                    # spin up staging + production targets
 cd ansible && ansible all -m ping && cd ..         # confirm connectivity
-
-./scripts/deploy.sh <your-dockerhub-username> staging      # deploy to staging
-./scripts/deploy.sh <your-dockerhub-username> production   # promote to production
 ```
 
-Before you deploy, you can inspect the staging target and see that the app is not yet running. For example:
+Before you deploy, inspect the empty staging target and see that the app is not yet running:
 ```bash
 docker exec -it deploy-target-stag bash -lc 'ls / && echo "No app deployed until Ansible runs"'
 ```
 
-Then deploy to staging and refresh the UI/API ports to see the app appear. This makes it clear that Ansible is doing the work of configuring the target and launching the stack.
+Then deploy to staging, refresh the UI/API ports, and watch the app appear in the staging environment.
+
+```bash
+./scripts/deploy.sh <your-dockerhub-username> staging      # deploy to staging
+./scripts/deploy.sh <your-dockerhub-username> production   # promote to production
+```
 
 Open the **PORTS** tab:
 - **8501** staging UI · **8001/docs** staging API

@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 # Install SSH server, Docker, and Python (what Ansible needs on a target)
 RUN apt-get update && \
-    apt-get install -y openssh-server docker.io python3 python3-pip sudo && \
+    apt-get install -y openssh-server docker.io python3 python3-pip python3-requests python3-docker sudo && \
     rm -rf /var/lib/apt/lists/*
 
 # Configure SSH: allow root login with a password (lab only)

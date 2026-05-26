@@ -1,0 +1,18 @@
+[staging]
+staging ansible_host=localhost ansible_port=2211 ansible_user=root ansible_ssh_pass=root
+
+[production]
+prod ansible_host=localhost ansible_port=2212 ansible_user=root ansible_ssh_pass=root
+
+# Per-environment published ports (UI = Streamlit, API = FastAPI)
+[staging:vars]
+ui_port=8501
+api_port=8001
+
+[production:vars]
+ui_port=8502
+api_port=8002
+
+# Variables applied to every target
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3

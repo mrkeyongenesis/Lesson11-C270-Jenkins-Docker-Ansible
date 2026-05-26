@@ -1,0 +1,93 @@
+---
+# ============================================================
+#  Deploy the two-tier app: FastAPI back-end + Streamlit front-end.
+#  Pulls both images from Docker Hub and wires them together.
+#
+#  Run with:
+#    ansible-playbook deploy_stack_playbook.yaml -e target=staging
+#    ansible-playbook deploy_stack_playbook.yaml -e target=production
+#
+#  ⚠️ EDIT the two image names below to your Docker Hub username,
+#     OR pass them on the command line, e.g.:
+#       -e dh_user=yourname
+# ============================================================
+- name: DEPLOY FASTAPI BACK-END + STREAMLIT FRONT-END STACK
+  hosts: "{{ target | default('staging') }}"
+  gather_facts: false
+
+  vars:
+    # Set your Docker Hub username here (or override with -e dh_user=...)
+    dh_user: your-dockerhub-username        # <-- CHANGE
+    backend_image:  "{{ dh_user }}/student-backend:latest"
+    frontend_image: "{{ dh_user }}/student-frontend:latest"
+
+  tasks:
+    - name: CREATE A PRIVATE NETWORK FOR THE STACK
+      community.docker.docker_network:
+        name: appnet
+        state: present
+
+    # ---------- BACK-END (FastAPI) ----------
+    - name: PULL THE BACK-END IMAGE FROM DOCKER HUB
+      community.docker.docker_image:
+        name: "{{ backend_image }}"
+        source: pull
+        force_source: true        # always grab the newest :latest
+
+    - name: RUN THE FASTAPI BACK-END CONTAINER
+      community.docker.docker_container:
+        name: backend
+        image: "{{ backend_image }}"
+        state: started
+        recreate: true
+        networks:
+          - name: appnet
+        published_ports:
+          - "8000:8000"           # fixed inside the target; mapped out to api_port
+
+    # ---------- FRONT-END (Streamlit) ----------
+    - name: PULL THE FRONT-END IMAGE FROM DOCKER HUB
+      community.docker.docker_image:
+        name: "{{ frontend_image }}"
+        source: pull
+        force_source: true
+
+    - name: RUN THE STREAMLIT FRONT-END CONTAINER
+      community.docker.docker_container:
+        name: frontend
+        image: "{{ frontend_image }}"
+        state: started
+        recreate: true
+        networks:
+          - name: appnet
+        published_ports:
+          - "8501:8501"           # fixed inside the target; mapped out to ui_port
+        env:
+          # The front-end reaches the back-end by container name over appnet.
+          API_URL: "http://backend:8000"
+
+    # ---------- HEALTH CHECKS (run from the Codespace) ----------
+    - name: WAIT FOR THE BACK-END API TO RESPOND
+      ansible.builtin.uri:
+        url: "http://localhost:{{ api_port }}/"
+        return_content: yes
+      register: api_result
+      retries: 10
+      delay: 3
+      until: api_result.status == 200
+      delegate_to: localhost
+
+    - name: WAIT FOR THE FRONT-END UI TO RESPOND
+      ansible.builtin.uri:
+        url: "http://localhost:{{ ui_port }}/"
+        status_code: 200
+      register: ui_result
+      retries: 10
+      delay: 3
+      until: ui_result.status == 200
+      delegate_to: localhost
+
+    - name: SHOW WHAT THE API RETURNED
+      ansible.builtin.debug:
+        msg: "API says: {{ api_result.content }}"
+      delegate_to: localhost

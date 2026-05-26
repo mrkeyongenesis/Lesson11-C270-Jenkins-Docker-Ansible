@@ -1,0 +1,29 @@
+{
+  "name": "CI/CD + Ansible Lab",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "forwardPorts": [8000, 8501, 8080, 2211, 2212, 8001, 8002, 8502],
+  "portsAttributes": {
+    "8000": { "label": "Backend API (local)" },
+    "8501": { "label": "Frontend UI (local / staging)" },
+    "8080": { "label": "Jenkins" },
+    "8001": { "label": "Staging API" },
+    "8002": { "label": "Production API" },
+    "8502": { "label": "Production UI" }
+  },
+  "postCreateCommand": "pip install -r backend/requirements.txt -r frontend/requirements.txt || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "redhat.ansible",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}

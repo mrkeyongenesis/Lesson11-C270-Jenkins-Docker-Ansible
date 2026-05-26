@@ -1,0 +1,45 @@
+---
+# ============================================================
+#  A simple first playbook — shows Ansible's power in a few lines.
+#  Runs on BOTH staging and production at once (hosts: all).
+#  Run with:  ansible-playbook setup_basics_playbook.yaml
+# ============================================================
+- name: PREPARE EVERY ENVIRONMENT WITH COMMON TOOLS
+  hosts: all                # runs on staging AND production together
+  gather_facts: true        # collect facts (OS, IP, memory) from each target
+
+  tasks:
+    - name: INSTALL COMMON DEPENDENCIES
+      ansible.builtin.apt:
+        name:
+          - curl
+          - vim
+          - htop
+          - git
+        state: present
+        update_cache: yes
+
+    - name: MAKE SURE THE SSH SERVICE IS RUNNING
+      ansible.builtin.service:
+        name: ssh
+        state: started
+
+    - name: CREATE A DEPLOY USER ON EVERY MACHINE
+      ansible.builtin.user:
+        name: deployer
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+
+    - name: DROP A SERVER INFO FILE ONTO EACH TARGET
+      ansible.builtin.copy:
+        dest: /etc/server-info.txt
+        content: |
+          Managed by Ansible
+          Hostname:   {{ inventory_hostname }}
+          OS:         {{ ansible_distribution }} {{ ansible_distribution_version }}
+          IP address: {{ ansible_default_ipv4.address | default('n/a') }}
+
+    - name: SHOW EACH MACHINE'S OS AND IP
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} is running {{ ansible_distribution }} {{ ansible_distribution_version }}"

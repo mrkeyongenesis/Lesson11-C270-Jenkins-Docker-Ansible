@@ -1,0 +1,18 @@
+# Run the whole app locally with one command:
+#   docker compose up --build
+# Then open port 8501 (UI) and 8000/docs (API) in the PORTS tab.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8501:8501"
+    environment:
+      # Front-end reaches back-end by service name on the compose network.
+      API_URL: "http://backend:8000"
+    depends_on:
+      - backend

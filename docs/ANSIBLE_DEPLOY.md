@@ -12,16 +12,16 @@ The Ansible patterns (inventory, `ansible.cfg`, `ping` checks, playbooks, module
 
 ```
                 ┌──────────────────────────────────────────────────────────┐
-  Browser ─▶    │  STAGING environment (target container "staging")          │
-  :8501 (UI)    │                                                            │
-  :8001 (API)   │   ┌─ frontend (Streamlit :8501) ──HTTP──▶ backend (:8000) ─┐ │
-                │   └──────────── private network "appnet" ─────────────────┘ │
+  Browser ─▶    │  STAGING environment (target container "staging")        │
+  :8501 (UI)    │                                                          │
+  :8001 (API)   │   ┌─ frontend (Streamlit :8501) ──HTTP──▶ backend (:8000)│
+                │   └──────────── private network "appnet" ────────────────│
                 └──────────────────────────────────────────────────────────┘
                 ┌──────────────────────────────────────────────────────────┐
-  Browser ─▶    │  PRODUCTION environment (target container "prod")          │
-  :8502 (UI)    │                                                            │
-  :8002 (API)   │   ┌─ frontend (Streamlit :8501) ──HTTP──▶ backend (:8000) ─┐ │
-                │   └──────────── private network "appnet" ─────────────────┘ │
+  Browser ─▶    │  PRODUCTION environment (target container "prod")        │
+  :8502 (UI)    │                                                          │
+  :8002 (API)   │   ┌─ frontend (Streamlit :8501) ──HTTP──▶ backend (:8000)│
+                │   └──────────── private network "appnet" ────────────────│
                 └──────────────────────────────────────────────────────────┘
 ```
 

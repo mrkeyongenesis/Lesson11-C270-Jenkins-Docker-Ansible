@@ -85,10 +85,31 @@
           # The front-end reaches the back-end by container name over appnet.
           API_URL: "http://{{ backend_name }}:8000"
 
+    - name: GATHER BACKEND CONTAINER INFORMATION
+      community.docker.docker_container_info:
+        name: "{{ backend_name }}"
+      register: backend_info
+
+    - name: GATHER FRONTEND CONTAINER INFORMATION
+      community.docker.docker_container_info:
+        name: "{{ frontend_name }}"
+      register: frontend_info
+
+    - name: SET INTERNAL SERVICE IP FACTS
+      ansible.builtin.set_fact:
+        backend_ip: "{{ backend_info.containers[0].NetworkSettings.Networks[appnet_name].IPAddress }}"
+        frontend_ip: "{{ frontend_info.containers[0].NetworkSettings.Networks[appnet_name].IPAddress }}"
+
+    - name: SHOW BACKEND AND FRONTEND INTERNAL IP ADDRESSES
+      ansible.builtin.debug:
+        msg:
+          - "Backend internal IP: {{ backend_ip }}"
+          - "Frontend internal IP: {{ frontend_ip }}"
+
     # ---------- HEALTH CHECKS (run from the Codespace) ----------
     - name: WAIT FOR THE BACK-END API TO RESPOND
       ansible.builtin.uri:
-        url: "http://localhost:{{ api_port }}/"
+        url: "http://{{ backend_ip }}:8000/"
         return_content: yes
       register: api_result
       retries: 15

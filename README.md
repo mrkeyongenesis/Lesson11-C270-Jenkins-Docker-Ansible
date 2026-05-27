@@ -121,6 +121,13 @@ Then open:
 - `http://localhost:8501` for the Streamlit UI
 - `http://localhost:8001/docs` for the FastAPI API docs
 
+You can also confirm the staging container IPs with:
+```bash
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' backend-staging
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' frontend-staging
+```
+Those IPs are the internal Docker network addresses used by the app containers.
+
 ### 5. Deploy production locally with Ansible
 
 This is the same playbook, but it uses the production target and different ports.
@@ -144,6 +151,13 @@ Expected result:
 Then open:
 - `http://localhost:8502`
 - `http://localhost:8002/docs`
+
+You can also confirm the production container IPs with:
+```bash
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' backend-production
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' frontend-production
+```
+Those IPs are the internal Docker network addresses used by the production containers.
 
 ### 6. Build and push images to Docker Hub
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
 #  Deploy the app stack to an environment with Ansible.
-#  Usage:  ./scripts/deploy.sh <dockerhub-username> <staging|production>
-#  Example: ./scripts/deploy.sh mrkeyongenesis staging
+#  Usage:  ./scripts/deploy.sh <dockerhub-username|local> <staging|production>
+#  Examples:
+#    ./scripts/deploy.sh myuser staging
+#    ./scripts/deploy.sh local staging
 # ============================================================
 set -euo pipefail
 
@@ -10,14 +12,24 @@ DH="${1:-}"
 TARGET="${2:-staging}"
 
 if [ -z "$DH" ]; then
-  echo "Usage: $0 <dockerhub-username> <staging|production>"
+  echo "Usage: $0 <dockerhub-username|local> <staging|production>"
   exit 1
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Prepare the local Docker environment and remove old target containers/networks.
+"$REPO_ROOT/scripts/setup_environments.sh"
+
 cd "$REPO_ROOT/ansible"
 
-echo "🚀 Deploying '$TARGET' using images from Docker Hub user '$DH'..."
+if [ "$DH" = "local" ]; then
+  echo "🚀 Deploying '$TARGET' using local images..."
+  DH=""
+else
+  echo "🚀 Deploying '$TARGET' using images from Docker Hub user '$DH'..."
+fi
+
 ansible-playbook deploy_stack_playbook.yaml -e "target=$TARGET" -e "dh_user=$DH"
 
 echo ""

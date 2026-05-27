@@ -19,8 +19,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "🏗️  Building images locally (no push)..."
-docker build -t student-backend:test  ./backend
-docker build -t student-frontend:test ./frontend
+docker build -t student-backend:test -t student-backend:latest ./backend
+docker build -t student-frontend:test -t student-frontend:latest ./frontend
 
 echo "🌐 Creating a test network..."
 docker network create test-net >/dev/null 2>&1 || true

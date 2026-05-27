@@ -18,10 +18,10 @@ echo "🔐 Logging in to Docker Hub as '$DH' (paste your access token as the pas
 docker login -u "$DH"
 
 echo "🏗️  Building back-end image: $DH/student-backend:latest"
-docker build -t "$DH/student-backend:latest" "$REPO_ROOT/backend"
+docker build -t "$DH/student-backend:latest" -t student-backend:latest "$REPO_ROOT/backend"
 
 echo "🏗️  Building front-end image: $DH/student-frontend:latest"
-docker build -t "$DH/student-frontend:latest" "$REPO_ROOT/frontend"
+docker build -t "$DH/student-frontend:latest" -t student-frontend:latest "$REPO_ROOT/frontend"
 
 echo "⬆️  Pushing back-end..."
 docker push "$DH/student-backend:latest"

@@ -1,8 +1,8 @@
 [staging]
-deploy-target-stag ansible_host=localhost ansible_port=2211 ansible_user=root ansible_ssh_pass=root
+localhost ansible_connection=local
 
 [production]
-prod ansible_host=localhost ansible_port=2212 ansible_user=root ansible_ssh_pass=root
+localhost ansible_connection=local
 
 # Per-environment published ports (UI = Streamlit, API = FastAPI)
 [staging:vars]

@@ -1,19 +1,38 @@
 FROM ubuntu:22.04
 
-# Install SSH server, Docker, and Python (what Ansible needs on a target)
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install SSH server, Docker, and Python support needed by Ansible target hosts.
 RUN apt-get update && \
-    apt-get install -y openssh-server docker.io python3 python3-pip python3-requests python3-docker sudo && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends openssh-server docker.io python3 python3-pip && \
+    python3 -m pip install --no-cache-dir docker && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /var/run/sshd && \
+    ssh-keygen -A
 
 # Configure SSH: allow root login with a password (lab only)
-RUN mkdir -p /var/run/sshd && \
-    echo 'root:root' | chpasswd && \
+RUN echo 'root:root' | chpasswd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-EXPOSE 22 80
+EXPOSE 22
 
-## Start Docker daemon and the SSH server when the container runs
-## Use a script to ensure both start properly with proper timing
-RUN echo '#!/bin/bash\nnohup dockerd > /var/log/dockerd.log 2>&1 &\nfor i in {1..30}; do\n  docker version >/dev/null 2>&1 && break\n  sleep 1\ndone\n/usr/sbin/sshd -D' > /start.sh && chmod +x /start.sh
+RUN cat > /start.sh <<'EOF'
+#!/bin/sh
+set -e
+
+dockerd --host=unix:///var/run/docker.sock --storage-driver=vfs &
+
+# Wait for the daemon to become available
+for i in $(seq 1 30); do
+  if docker version >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+exec /usr/sbin/sshd -D
+EOF
+RUN chmod +x /start.sh
+
 CMD ["/start.sh"]

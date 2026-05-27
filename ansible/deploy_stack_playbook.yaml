@@ -16,70 +16,74 @@
   gather_facts: false
 
   vars:
-    # Set your Docker Hub username here (or override with -e dh_user=...)
-    dh_user: "{{ dh_user | default('your-dockerhub-username') }}"
-    backend_image:  "{{ dh_user }}/student-backend:latest"
-    frontend_image: "{{ dh_user }}/student-frontend:latest"
-    # Per-environment ports (can be overridden per-host)
-    api_port: "{{ hostvars[inventory_hostname].api_port | default(8000) }}"
-    ui_port: "{{ hostvars[inventory_hostname].ui_port | default(8501) }}"
+    # Choose between local images and Docker Hub images.
+    dh_user: "{{ dh_user | default('') }}"
+    local_mode: "{{ dh_user == '' }}"
+    backend_image: "{{ local_mode | ternary('student-backend:latest', dh_user ~ '/student-backend:latest') }}"
+    frontend_image: "{{ local_mode | ternary('student-frontend:latest', dh_user ~ '/student-frontend:latest') }}"
+    image_source: "{{ local_mode | ternary('local', 'pull') }}"
+    backend_name: "backend-{{ target }}"
+    frontend_name: "frontend-{{ target }}"
+    appnet_name: "appnet-{{ target }}"
+    api_port: "{{ (target == 'staging') | ternary(8001, 8002) }}"
+    ui_port: "{{ (target == 'staging') | ternary(8501, 8502) }}"
 
   tasks:
     - name: REMOVE OLD BACKEND CONTAINER IF IT EXISTS
       community.docker.docker_container:
-        name: backend
+        name: "{{ backend_name }}"
         state: absent
       ignore_errors: true
 
     - name: REMOVE OLD FRONTEND CONTAINER IF IT EXISTS
       community.docker.docker_container:
-        name: frontend
+        name: "{{ frontend_name }}"
         state: absent
       ignore_errors: true
 
     - name: CREATE A PRIVATE NETWORK FOR THE STACK
       community.docker.docker_network:
-        name: appnet
+        name: "{{ appnet_name }}"
         state: present
 
     # ---------- BACK-END (FastAPI) ----------
-    - name: PULL THE BACK-END IMAGE FROM DOCKER HUB
+    - name: PULL THE BACK-END IMAGE
       community.docker.docker_image:
         name: "{{ backend_image }}"
-        source: pull
-        force_source: true        # always grab the newest :latest
+        source: "{{ image_source }}"
+        force_source: "{{ (image_source == 'pull') | ternary(true, omit) }}"
 
     - name: RUN THE FASTAPI BACK-END CONTAINER
       community.docker.docker_container:
-        name: backend
+        name: "{{ backend_name }}"
         image: "{{ backend_image }}"
         state: started
         recreate: true
         networks:
-          - name: appnet
+          - name: "{{ appnet_name }}"
         published_ports:
           - "{{ api_port }}:8000"           # mapped out to api_port
 
     # ---------- FRONT-END (Streamlit) ----------
-    - name: PULL THE FRONT-END IMAGE FROM DOCKER HUB
+    - name: PULL THE FRONT-END IMAGE
       community.docker.docker_image:
         name: "{{ frontend_image }}"
-        source: pull
-        force_source: true
+        source: "{{ image_source }}"
+        force_source: "{{ (image_source == 'pull') | ternary(true, omit) }}"
 
     - name: RUN THE STREAMLIT FRONT-END CONTAINER
       community.docker.docker_container:
-        name: frontend
+        name: "{{ frontend_name }}"
         image: "{{ frontend_image }}"
         state: started
         recreate: true
         networks:
-          - name: appnet
+          - name: "{{ appnet_name }}"
         published_ports:
           - "{{ ui_port }}:8501"           # mapped out to ui_port
         env:
           # The front-end reaches the back-end by container name over appnet.
-          API_URL: "http://backend:8000"
+          API_URL: "http://{{ backend_name }}:8000"
 
     # ---------- HEALTH CHECKS (run from the Codespace) ----------
     - name: WAIT FOR THE BACK-END API TO RESPOND

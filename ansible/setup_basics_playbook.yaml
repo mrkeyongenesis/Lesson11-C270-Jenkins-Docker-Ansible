@@ -5,11 +5,11 @@
 #  Run with:  ansible-playbook setup_basics_playbook.yaml
 # ============================================================
 - name: PREPARE EVERY ENVIRONMENT WITH COMMON TOOLS
-  hosts: all                # runs on staging AND production together
+  hosts: staging                # runs on staging AND production together
   gather_facts: true        # collect facts (OS, IP, memory) from each target
 
   tasks:
-    - name: INSTALL COMMON DEPENDENCIES
+    - name: INSTALL COMMON DEPENDENCIES (Debian/Ubuntu only)
       ansible.builtin.apt:
         name:
           - curl
@@ -18,20 +18,41 @@
           - git
         state: present
         update_cache: yes
+      when: ansible_pkg_mgr == 'apt'
+      become: yes
 
-    - name: MAKE SURE THE SSH SERVICE IS RUNNING
+    - name: SKIP PACKAGE INSTALL ON NON-APT SYSTEMS
+      ansible.builtin.debug:
+        msg: "Skipping package installation: host package manager is {{ ansible_pkg_mgr }}. Please install curl, vim, htop, git manually if required."
+      when: ansible_pkg_mgr is defined and ansible_pkg_mgr != 'apt'
+
+    - name: MAKE SURE THE SSH SERVICE IS RUNNING (if supported)
       ansible.builtin.service:
         name: ssh
         state: started
+      when: ansible_service_mgr is defined and ansible_service_mgr in ['systemd', 'sysvinit', 'upstart', 'openrc']
+      become: yes
 
-    - name: CREATE A DEPLOY USER ON EVERY MACHINE
+    - name: SKIP SSH SERVICE MANAGEMENT ON UNSUPPORTED SYSTEMS
+      ansible.builtin.debug:
+        msg: "Skipping SSH service management: service manager is {{ ansible_service_mgr | default('unknown') }}. On macOS enable Remote Login in System Settings or run: 'sudo systemsetup -setremotelogin on'"
+      when: ansible_service_mgr is defined and ansible_service_mgr not in ['systemd', 'sysvinit', 'upstart', 'openrc']
+
+    - name: CREATE A DEPLOY USER ON EVERY MACHINE (skip macOS)
       ansible.builtin.user:
         name: deployer
         shell: /bin/bash
         groups: sudo
         append: yes
+      become: yes
+      when: ansible_system is defined and ansible_system != 'Darwin'
 
-    - name: DROP A SERVER INFO FILE ONTO EACH TARGET
+    - name: SKIP CREATING DEPLOY USER ON macOS
+      ansible.builtin.debug:
+        msg: "Skipping creating 'deployer' user on macOS. Create it manually or run this playbook from a Linux control host with privileges."
+      when: ansible_system is defined and ansible_system == 'Darwin'
+
+    - name: DROP A SERVER INFO FILE ONTO EACH TARGET (requires privilege)
       ansible.builtin.copy:
         dest: /etc/server-info.txt
         content: |
@@ -39,6 +60,13 @@
           Hostname:   {{ inventory_hostname }}
           OS:         {{ ansible_distribution }} {{ ansible_distribution_version }}
           IP address: {{ ansible_default_ipv4.address | default('n/a') }}
+      become: yes
+      when: ansible_system is defined and ansible_system != 'Darwin'
+
+    - name: SKIP WRITING /etc/server-info.txt ON macOS
+      ansible.builtin.debug:
+        msg: "Skipping /etc/server-info.txt: running on macOS. Create the file manually if desired."
+      when: ansible_system is defined and ansible_system == 'Darwin'
 
     - name: SHOW EACH MACHINE'S OS AND IP
       ansible.builtin.debug:

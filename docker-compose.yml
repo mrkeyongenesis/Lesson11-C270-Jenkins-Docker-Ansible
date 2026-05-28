@@ -2,7 +2,7 @@ version: '3.8'
 
 # Run the whole app locally with one command:
 #   docker compose up --build
-# Then open port 8501 (UI) and 8000/docs (API) in the PORTS tab.
+# Then open port 8501 (UI), 8000/docs (API), and 8080 (Jenkins) in the PORTS tab.
 services:
   backend:
     build: ./backend
@@ -18,3 +18,19 @@ services:
       API_URL: "http://backend:8000"
     depends_on:
       - backend
+
+  jenkins:
+    image: jenkins/jenkins:latest
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      JAVA_OPTS: "-Xmx512m -Xms512m"
+    # Note: Jenkins will ask you to unlock with an admin password on first startup.
+    # Run: docker logs jenkins to find the initial admin password.
+
+volumes:
+  jenkins_home:

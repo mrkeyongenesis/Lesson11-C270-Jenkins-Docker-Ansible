@@ -17,7 +17,8 @@
 
   vars:
     # Choose between local images and Docker Hub images.
-    dh_user: "{{ dh_user | default('') }}"
+    # set a safe default; override with -e dh_user=YOURNAME when running the playbook
+    dh_user: ""
     local_mode: "{{ dh_user == '' }}"
     backend_image: "{{ local_mode | ternary('student-backend:latest', dh_user ~ '/student-backend:latest') }}"
     frontend_image: "{{ local_mode | ternary('student-frontend:latest', dh_user ~ '/student-frontend:latest') }}"

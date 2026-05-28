@@ -6,11 +6,6 @@ docker network rm appnet-staging || true
 docker rm -f manual-backend manual-frontend || true
 docker network rm appnet-local || true
 
-## Lesson 10: RHEL 9 partitioning with parted
-
-- Beginner guide: `docs/LESSON10_PARTED_RHEL9.md`
-- Full lesson index: `docs/README.md`
-
 # Quick Step-by-Step Guide — Simple and Beginner Friendly
 
 This minimal guide shows the exact, copy/paste commands to build, run, and verify the two-tier app (backend + frontend) on your local machine. It keeps each step small and shows what you should expect.

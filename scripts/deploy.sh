@@ -26,6 +26,14 @@ cd "$REPO_ROOT/ansible"
 if [ "$DH" = "local" ]; then
   echo "🚀 Deploying '$TARGET' using local images..."
   DH=""
+
+  if ! docker image inspect student-backend:latest >/dev/null 2>&1 || ! docker image inspect student-frontend:latest >/dev/null 2>&1; then
+    echo "🔨 Local Docker images not found. Building backend and frontend images now..."
+    docker build -t student-backend:latest "$REPO_ROOT/backend"
+    docker build -t student-frontend:latest "$REPO_ROOT/frontend"
+  else
+    echo "✅ Local Docker images already exist. Skipping build."
+  fi
 else
   echo "🚀 Deploying '$TARGET' using images from Docker Hub user '$DH'..."
 fi

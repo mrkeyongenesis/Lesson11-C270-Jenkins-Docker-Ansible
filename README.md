@@ -37,6 +37,8 @@ Expected: Script prints successful checks or clear failure messages (which you c
 3) Deploy to local "staging" with Ansible (one command)
 This runs the playbook against your local Docker host and creates `backend-staging` and `frontend-staging` containers.
 
+> If you have not built the images yet, the deployment script now detects that and builds them automatically.
+
 ```bash
 ./scripts/deploy.sh local staging
 ```

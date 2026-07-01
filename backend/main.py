@@ -3,9 +3,10 @@
 #  Run locally with:  uvicorn main:app --reload --port 8000
 # ============================================================
 
+from typing import Any
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 
 # ── 1. Create the app ────────────────────────────────────────
 app = FastAPI(
@@ -15,28 +16,30 @@ app = FastAPI(
 )
 
 # ── 2. In-memory "database" (just a Python list) ─────────────
-students_db = [
-    {"id": 1, "name": "Alice",   "grade": 88, "subject": "Math"},
-    {"id": 2, "name": "Bob",     "grade": 73, "subject": "Science"},
+students_db: list[dict[str, Any]] = [
+    {"id": 1, "name": "Alice", "grade": 88, "subject": "Math"},
+    {"id": 2, "name": "Bob", "grade": 73, "subject": "Science"},
     {"id": 3, "name": "Charlie", "grade": 95, "subject": "History"},
-    {"id": 4, "name": "Diana",   "grade": 61, "subject": "Math"},
-    {"id": 5, "name": "Eve",     "grade": 82, "subject": "Science"},
+    {"id": 4, "name": "Diana", "grade": 61, "subject": "Math"},
+    {"id": 5, "name": "Eve", "grade": 82, "subject": "Science"},
 ]
 
-# ── 3. Data model (what a student looks like) ─────────────────
+
+# ── 4. Data model (what a student looks like) ─────────────────
 class Student(BaseModel):
     name: str
-    grade: int          # 0 – 100
+    grade: int  # 0 – 100
     subject: str
 
+
 class StudentUpdate(BaseModel):
-    name: Optional[str]  = None
-    grade: Optional[int] = None
-    subject: Optional[str] = None
+    name: str | None = None
+    grade: int | None = None
+    subject: str | None = None
 
 
-# ── 4. Helper ─────────────────────────────────────────────────
-def find_student(student_id: int):
+# ── 5. Helper ─────────────────────────────────────────────────
+def find_student(student_id: int) -> dict[str, Any] | None:
     for s in students_db:
         if s["id"] == student_id:
             return s
@@ -46,6 +49,7 @@ def find_student(student_id: int):
 # ============================================================
 #  ROUTES  (each one = one API endpoint)
 # ============================================================
+
 
 # ── GET /  ── Health-check ────────────────────────────────────
 @app.get("/")
@@ -76,7 +80,7 @@ def get_student(student_id: int):
 def create_student(student: Student):
     """Add a brand-new student to the database."""
     new_id = max(s["id"] for s in students_db) + 1
-    new_student = {"id": new_id, **student.dict()}
+    new_student = {"id": new_id, **student.model_dump()}
     students_db.append(new_student)
     return {"message": "Student created!", "student": new_student}
 
@@ -88,7 +92,7 @@ def update_student(student_id: int, updates: StudentUpdate):
     student = find_student(student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    for field, value in updates.dict(exclude_none=True).items():
+    for field, value in updates.model_dump(exclude_none=True).items():
         student[field] = value
     return {"message": "Student updated!", "student": student}
 
@@ -121,7 +125,7 @@ def get_stats():
     grades = [s["grade"] for s in students_db]
     return {
         "total_students": len(students_db),
-        "average_grade":  round(sum(grades) / len(grades), 1),
-        "highest_grade":  max(grades),
-        "lowest_grade":   min(grades),
+        "average_grade": round(sum(grades) / len(grades), 1),
+        "highest_grade": max(grades),
+        "lowest_grade": min(grades),
     }

@@ -3,6 +3,10 @@ version: '3.8'
 # Run the whole app locally with one command:
 #   docker compose up --build
 # Then open port 8501 (UI), 8000/docs (API), and 8080 (Jenkins) in the PORTS tab.
+#
+# For the full CI/CD experience with code quality scanning:
+#   docker compose up --build -d sonarqube   # start SonarQube first
+#   docker compose up --build                # start everything else
 services:
   backend:
     build: ./backend
@@ -19,8 +23,9 @@ services:
     depends_on:
       - backend
 
+  # ── Jenkins CI/CD Server ──────────────────────────────────
   jenkins:
-    image: jenkins/jenkins:latest
+    image: jenkins/jenkins:lts       # use LTS for stability
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -28,9 +33,30 @@ services:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      JAVA_OPTS: "-Xmx512m -Xms512m"
+      JAVA_OPTS: "-Xmx1024m -Xms512m"
     # Note: Jenkins will ask you to unlock with an admin password on first startup.
     # Run: docker logs jenkins to find the initial admin password.
+    depends_on:
+      - sonarqube
+
+  # ── SonarQube — Code Quality & Static Analysis ────────────
+  # Open http://localhost:9000 (default admin: admin / admin)
+  sonarqube:
+    image: sonarqube:community       # free & open source
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+      # For demo use embedded H2 database (default).
+      # Production: switch to PostgreSQL (see docs).
+    mem_limit: 2g                    # SonarQube needs at least 2 GB
 
 volumes:
   jenkins_home:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

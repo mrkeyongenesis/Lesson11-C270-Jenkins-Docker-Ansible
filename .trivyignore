@@ -1,0 +1,8 @@
+# ============================================================
+#  Trivy ignore file — CVEs to suppress
+#  Only add entries here AFTER verifying they are false
+#  positives or not exploitable in this context.
+# ============================================================
+
+# Example (uncomment and adjust as needed):
+# CVE-2023-12345  # False positive in urllib3 < 2.x — we use requests which vendors its own

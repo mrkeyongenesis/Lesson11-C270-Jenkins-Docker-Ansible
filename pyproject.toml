@@ -1,0 +1,119 @@
+# ============================================================
+#  Python project configuration
+#  Tool settings: Ruff (lint+format), mypy (type checking)
+# ============================================================
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+# ═════════════════════════════════════════════════════════════
+#  Ruff — Fast Python linter + formatter (replaces Flake8,
+#  isort, pycodestyle, pyflakes, autoflake, pydocstyle, etc.)
+# ═════════════════════════════════════════════════════════════
+[tool.ruff]
+# Target Python version
+target-version = "py311"
+
+# Files to include
+include = ["backend/*.py", "frontend/*.py", "scripts/*.py"]
+
+# Files to exclude
+exclude = [
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".git",
+    "**/__pycache__",
+    "**/.venv",
+]
+
+# Line length (Black-compatible default)
+line-length = 100
+
+# ═════════════════════════════════════════════════════════════
+#  Ruff — Lint rules
+# ═════════════════════════════════════════════════════════════
+[tool.ruff.lint]
+# Select rule categories:
+#   F  — pyflakes (logic errors, undefined names, etc.)
+#   E  — pycodestyle (PEP 8 errors)
+#   W  — pycodestyle (PEP 8 warnings)
+#   I  — isort (import ordering)
+#   N  — pep8-naming (naming conventions)  — EDUCATIONAL: helpful for students
+#   UP — pyupgrade (modern Python idioms)
+#   B  — flake8-bugbear (common bugs & design issues)
+#   SIM — flake8-simplify (simplify expressions)
+#   ARG — flake8-unused-arguments (unused function args)
+#   RUF — Ruff-specific rules
+select = [
+    "F",      # pyflakes: essential — catch undefined names, unused imports
+    "E",      # pycodestyle errors: PEP 8 basics
+    "W",      # pycodestyle warnings
+    "I",      # isort: import ordering
+    "N",      # pep8-naming: naming conventions
+    "UP",     # pyupgrade: modern Python (f-strings, etc.)
+    "B",      # flake8-bugbear: likely bugs
+    "SIM",    # flake8-simplify: simplify code
+    "RUF",    # Ruff-specific rules
+]
+
+# Rules to ignore (for this educational project)
+ignore = [
+    "E501",   # line too long — relaxed for readability in educational code
+    "N802",   # function name should be lowercase — FastAPI routes use lowercase
+    "N803",   # argument name should be lowercase
+    "N806",   # variable in function should be lowercase
+    "N815",   # mixedCase variable in global scope
+    "B904",   # raise-within-try — educational code intentionally simple
+    "SIM115", # open-file-with-context-handler — not always applicable
+    "RUF001", # string contains ambiguous character — emoji are intentional
+    "RUF003", # comment contains ambiguous character
+]
+
+# Allow per-file ignores
+[tool.ruff.lint.per-file-ignores]
+"frontend/app.py" = [
+    "N802",   # Streamlit's callback functions use snake_case
+    "N803",
+    "N806",
+    "F811",   # redefinition of unused variable in Streamlit pattern
+]
+
+# Isort (import sorting) settings
+[tool.ruff.lint.isort]
+known-first-party = ["backend", "frontend"]
+force-sort-within-sections = true
+order-by-type = true
+
+# ═════════════════════════════════════════════════════════════
+#  Ruff — Formatter (like Black, but Ruff's own)
+# ═════════════════════════════════════════════════════════════
+[tool.ruff.format]
+# Quote style
+quote-style = "double"
+# Indent with spaces
+indent-style = "space"
+# Skip magic-trailing-comma
+skip-magic-trailing-comma = false
+# Line ending
+line-ending = "lf"
+
+# ═════════════════════════════════════════════════════════════
+#  mypy — Static type checking
+# ═════════════════════════════════════════════════════════════
+[tool.mypy]
+python_version = "3.11"
+strict = false                          # don't force strict mode
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_return_any = false                 # relaxed for educational code
+ignore_missing_imports = true           # ignore missing stubs (streamlit, fastapi)
+disallow_untyped_defs = false           # don't require type annotations everywhere
+disallow_incomplete_defs = false
+check_untyped_defs = false
+
+# TypedDict key access — relaxed for dict[str, Any] pattern
+disable_error_code = "literal-required"

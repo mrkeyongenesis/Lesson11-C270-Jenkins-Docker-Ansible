@@ -32,7 +32,7 @@ docker run -d --name test-frontend --network test-net \
 
 echo "⏳ Waiting for the backend to come up..."
 ok=""
-for i in $(seq 1 15); do
+for _ in $(seq 1 15); do
   if curl -fs http://localhost:8000/ >/dev/null 2>&1; then ok="yes"; break; fi
   sleep 2
 done

@@ -1,0 +1,40 @@
+# ============================================================
+#  Hadolint configuration — Dockerfile linter
+#  Relaxed rules for an educational demo project
+# ============================================================
+
+# Ignored rules:
+#   DL3008  — Pin versions in apt-get install (not using apt here)
+#   DL3013  — Pin versions in pip install (educational demo)
+#   DL3045  — COPY vs ADD (COPY is fine for our use case)
+#   DL4006  — SHELL check (not relevant for slim images)
+#   SC*     — ShellCheck warnings (startup scripts are minimal)
+ignored:
+  - DL3008
+  - DL3013
+  - DL3045
+  - DL4006
+  - SC1091
+  - SC2086
+
+# Override specific rules per Dockerfile
+override:
+  # Backend Dockerfile
+  backend/Dockerfile:
+    # DL3042: Use --no-cache-dir with pip — we already do, good.
+    # DL3044: Don't use COPY with multiple sources — fine for 2 files
+    ignore:
+      - DL3044
+
+  # Frontend Dockerfile
+  frontend/Dockerfile:
+    ignore:
+      - DL3044
+
+  # Target-image Dockerfile (Ubuntu SSH+docker host)
+  ansible/target-image/Dockerfile:
+    ignore:
+      - DL3008    # intentional: demo, not pinning apt versions
+      - DL3009    # rm -rf /var/lib/apt/lists after apt-get — we already do
+      - DL3013    # pip not pinned
+      - DL3059    # multiple consecutive RUNs — kept separate for clarity

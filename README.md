@@ -1,541 +1,1115 @@
-# Two-Tier Docker & Ansible Demo
+# 🎓 Student App — End-to-End CI/CD Guide
 
-A clean step-by-step guide for this two-tier app:
-- `backend/` — FastAPI backend
-- `frontend/` — Streamlit frontend
-- `ansible/` — staging and production deployment playbooks
-- `scripts/` — helper build and deploy scripts
+A complete, hands-on guide to building, testing, scanning, deploying, and automating a **two-tier web application** (FastAPI + Streamlit) using **Docker**, **Ansible**, **Jenkins**, and **open-source security tools**.
 
-This README is focused on:
-- testing the app locally
-- building Docker images and infrastructure
-- installing Ansible on the control node
-- connecting staging and production targets
-- deploying with Ansible
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        WHAT YOU'LL BUILD                                │
+│                                                                          │
+│  ┌──────────┐    ┌──────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │  FastAPI  │    │ Streamlit│    │   Staging    │    │  Production   │  │
+│  │  Backend  │◄───│ Frontend │───▶│ localhost:   │    │  localhost:   │  │
+│  │  :8000    │    │  :8501   │    │ 8501 / 8001  │    │ 8502 / 8002   │  │
+│  └──────────┘    └──────────┘    └──────────────┘    └──────────────┘  │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  CI/CD PIPELINE (Jenkins)                                        │   │
+│  │  Code → Lint → Build → Test → Security Scan → Push → Deploy     │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
 
-## Prerequisites
-- Docker is installed and running on your machine
-- Python 3.6+ is available
-- You have basic familiarity with the terminal
-- Git is installed (to clone this repo)
+---
 
-To verify Docker is available:
+## 📋 Table of Contents
+
+- [🏗 Architecture Overview](#-architecture-overview)
+- [✅ Prerequisites](#-prerequisites)
+- [📁 Project Structure](#-project-structure)
+- [🚀 Step 1 — Run with Docker Compose (30 seconds)](#-step-1--run-with-docker-compose-30-seconds)
+- [🔧 Step 2 — Run Manually (Understand Every Piece)](#-step-2--run-manually-understand-every-piece)
+- [🌐 Step 3 — Explore the Backend API](#-step-3--explore-the-backend-api)
+- [🔍 Step 4 — Code Quality & Security Scanning](#-step-4--code-quality--security-scanning)
+- [📦 Step 5 — Build & Push to Docker Hub](#-step-5--build--push-to-docker-hub)
+- [🤖 Step 6 — Deploy with Ansible (Staging → Production)](#-step-6--deploy-with-ansible-staging--production)
+- [🔄 Step 7 — CI/CD with Jenkins (Full Automation)](#-step-7--cicd-with-jenkins-full-automation)
+- [✅ Step 8 — Verify & Monitor Everything](#-step-8--verify--monitor-everything)
+- [🧩 How Everything Fits Together](#-how-everything-fits-together)
+- [🔧 Troubleshooting](#-troubleshooting)
+
+---
+
+## 🏗 Architecture Overview
+
+### The Application
+
+This is a **two-tier web application** — a backend API and a frontend UI that talks to it:
+
+| Tier | Technology | What It Does | Port |
+|------|-----------|-------------|------|
+| **Backend** | FastAPI (Python) | REST API — manage student records (CRUD) | `:8000` |
+| **Frontend** | Streamlit (Python) | Web UI that calls the backend API | `:8501` |
+| **Database** | In-memory (Python list) | Stores student data (resets on restart) | — |
+
+### How the Tiers Connect
+
+```
+  You (Browser)
+       │
+       ▼  http://localhost:8501
+  ┌──────────────────────┐
+  │  Streamlit Frontend  │  (app.py)
+  │  Port :8501           │
+  └─────────┬────────────┘
+       │  HTTP GET /students
+       │  HTTP POST /students
+       ▼  http://backend:8000
+  ┌──────────────────────┐
+  │  FastAPI Backend     │  (main.py)
+  │  Port :8000           │
+  └─────────┬────────────┘
+       │
+       ▼  In-memory Python list
+  ┌──────────────────────┐
+  │  Student Database     │
+  │  5 students (Alice,   │
+  │  Bob, Charlie, ...)   │
+  └──────────────────────┘
+```
+
+### The Three Environments
+
+| Environment | UI Port | API Port | What It's For |
+|-------------|---------|----------|--------------|
+| **Local dev** | `:8501` | `:8000` | Quick testing on your machine |
+| **Staging** | `:8501` | `:8001` | Pre-production validation |
+| **Production** | `:8502` | `:8002` | Live app (simulated locally) |
+
+### The CI/CD Pipeline (Full Flow)
+
+```
+                    ┌──────────────────────┐
+   Git Push ───────▶│   JENKINS PIPELINE    │
+                    └──────────────────────┘
+                            │
+         ┌──────────────────┼──────────────────┐
+         ▼                  ▼                  ▼
+   ┌──────────┐      ┌──────────┐      ┌──────────┐
+   │   CODE   │      │   BUILD  │      │   TEST   │
+   │ Quality  │      │  Images  │      │ Backend  │
+   │ & Lint   │      │ (Docker) │      │   API    │
+   │ ──────── │      └──────────┘      └──────────┘
+   │ Hadolint │            │                  │
+   │ Ruff     │            ▼                  │
+   │ mypy     │      ┌──────────┐             │
+   │ Bandit   │      │ Security │◄────────────┘
+   └──────────┘      │  Scan    │
+        │            │ ──────── │
+        ▼            │ Trivy    │
+   ┌──────────┐      │ OWASP DC │
+   │ SonarQube│      └──────────┘
+   │ Analysis │            │
+   └──────────┘            ▼
+        │            ┌──────────┐
+        ▼            │ Quality  │
+   ┌──────────┐      │  Gate    │
+   │  PUSH to │◄─────┤ (pass/   │
+   │Docker Hub│      │  fail)   │
+   └──────────┘      └──────────┘
+        │
+        ▼
+   ┌──────────┐      ┌────────────┐
+   │  Deploy  │─────▶│  Staging   │
+   │ (Ansible)│      └────────────┘
+   └──────────┘            │
+                           ▼
+                    ┌────────────┐
+                    │ Production │
+                    └────────────┘
+```
+
+---
+
+## ✅ Prerequisites
+
+| Tool | Why You Need It | Check Installed | Install If Missing |
+|------|----------------|----------------|-------------------|
+| **Docker** | Run containers locally | `docker version && docker ps` | [Docker Desktop](https://docs.docker.com/get-docker/) |
+| **Git** | Clone repo & version control | `git --version` | `brew install git` or [git-scm.com](https://git-scm.com/) |
+| **Python 3** | Run linting tools locally | `python3 --version` | `brew install python3` |
+| **Curl** | Test API endpoints | `curl --version` | Built into macOS / `sudo apt install curl` |
+
+**First step — verify Docker is ready:**
 
 ```bash
 docker version
 docker ps
 ```
 
-Both commands should run without errors.
+> Both commands must complete without errors. If `docker ps` fails, open Docker Desktop and wait for it to show **"Running"**.
 
-## 1) Repo structure at a glance
-- `backend/Dockerfile` — backend build instructions
-- `frontend/Dockerfile` — frontend build instructions
-- `docker-compose.yml` — optional local compose workflow (now includes Jenkins for CI/CD)
-- `ansible/hosts` — inventory for staging and production
-- `ansible/setup_basics_playbook.yaml` — prepare target hosts
-- `ansible/deploy_stack_playbook.yaml` — deploy the app stack
-- `scripts/build_and_push.sh` — build/push images to Docker Hub
-- `scripts/setup_environments.sh` — environment setup helper
-- `scripts/deploy.sh` — deployment helper
-- `Jenkinsfile` — CI/CD pipeline definition (checkout → build → test → push)
+---
 
-## 2) Set up the local environment (first time setup)
-Before building and deploying, clean up any old containers and networks from previous runs.
+## 📁 Project Structure
 
-This is **safe** — it only removes old demo containers and networks, not production data.
+After cloning, here's everything you get:
+
+```
+Lesson11-C270-Jenkins-Docker-Ansible/
+│
+├── 📄 Jenkinsfile                 # 🔄 CI/CD pipeline (10 stages)
+├── 📄 docker-compose.yml          # 🐳 One-command local setup
+├── 📄 pyproject.toml              # 🐍 Python tool config (Ruff, mypy)
+├── 📄 sonar-project.properties    # 📊 SonarQube config
+├── 📄 .hadolint.yaml              # 🐳 Dockerfile linter config
+├── 📄 .trivyignore                # 🛡️ Vulnerability ignore rules
+├── 📄 .env.example                # 🔑 Environment variable template
+│
+├── 📁 backend/                    # 🖥️ FASTAPI BACKEND
+│   ├── main.py                    #    6 REST endpoints (CRUD + search + stats)
+│   ├── requirements.txt           #    fastapi, uvicorn, pydantic
+│   └── Dockerfile                 #    python:3.11-slim image
+│
+├── 📁 frontend/                   # 🎨 STREAMLIT FRONTEND
+│   ├── app.py                     #    8 interactive pages
+│   ├── requirements.txt           #    streamlit, requests, pandas
+│   └── Dockerfile                 #    python:3.11-slim image
+│
+├── 📁 ansible/                    # 🤖 ANSIBLE AUTOMATION
+│   ├── ansible.cfg                #    Config (disable host key checking)
+│   ├── hosts                      #    Inventory (staging + production groups)
+│   ├── setup_basics_playbook.yaml #    Prepare target hosts
+│   ├── deploy_stack_playbook.yaml #    Deploy both containers with networking
+│   └── target-image/              #    Simulated remote server (SSH + Docker)
+│       └── Dockerfile
+│
+├── 📁 scripts/                    # 🛠️ HELPER SCRIPTS
+│   ├── scan.sh                    #    🔍 Run ALL security & lint checks
+│   ├── test_local.sh              #    🧪 Build + run + test locally
+│   ├── build_and_push.sh          #    📦 Build & push to Docker Hub
+│   ├── deploy.sh                  #    🚀 Deploy with Ansible (one command)
+│   ├── check_staging.sh           #    🔎 Inspect staging deployment
+│   ├── setup_environments.sh      #    🧹 Clean up before deploying
+│   └── install_ansible.sh         #    📥 Install Ansible on any OS
+│
+├── 📁 jenkins-app/                # 📚 Simple Flask app (for learning Jenkins basics)
+│
+└── 📁 docs/                       # 📖 Detailed reference guides
+    ├── JENKINS_PIPELINE.md
+    └── ANSIBLE_DEPLOY.md
+```
+
+---
+
+## 🚀 Step 1 — Run with Docker Compose (30 seconds)
+
+This is the fastest way to see the app working. Docker Compose starts **everything** with one command.
+
+```bash
+docker compose up --build
+```
+
+### What Starts
+
+| Service | What It Is | URL |
+|---------|-----------|-----|
+| `backend` | FastAPI (students API) | http://localhost:8000/docs |
+| `frontend` | Streamlit (web UI) | http://localhost:8501 |
+| `jenkins` | CI/CD automation server | http://localhost:8080 |
+| `sonarqube` | Code quality analysis | http://localhost:9000 |
+
+### Your First Interaction
+
+1. **Open** http://localhost:8501 — you should see the **Student API Explorer**
+2. **Click** `"🏠 Home — Health Check"` → Click **"🚀 Send Request"**
+   - You should see: `{"message": "🎓 Student API is running!", "status": "OK"}`
+3. **Click** `"📋 GET — All Students"` → Click **"🚀 Send Request"**
+   - You should see 5 students: Alice, Bob, Charlie, Diana, Eve
+4. **Click** `"📊 GET — Stats"` → Click **"🚀 Send Request"**
+   - You should see: average grade 79.8, highest 95, lowest 61
+5. **Open** http://localhost:8000/docs — FastAPI's auto-generated documentation
+   - Click any endpoint → **"Try it out"** → **"Execute"**
+
+### Screenshot of What You Should See
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  🎓 Student API Explorer                                        │
+│  ───────────────────────────────────────────────                │
+│                                                                 │
+│  ┌─────────────┐   ┌────────────────────────────────────────┐  │
+│  │ 🏠 Home     │   │  📋 All Students                       │  │
+│  │ 📋 All Std. │   │  ──────────────────────────             │  │
+│  │ 🔍 One Std. │   │  GET /students                          │  │
+│  │ 🔎 Search   │   │                                        │  │
+│  │ 📊 Stats    │   │  [🚀 Send Request]                      │  │
+│  │ ➕ POST     │   │                                        │  │
+│  │ ✏️ PUT      │   │  Response: Status 200                   │  │
+│  │ 🗑️ DELETE   │   │  {"total":5,"students":[               │  │
+│  └─────────────┘   │    {"id":1,"name":"Alice",...},         │  │
+│                    │    {"id":2,"name":"Bob",...},            │  │
+│                    │    ...                                   │  │
+│                    │  ]}                                      │  │
+│                    └────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### When You're Done
+
+```bash
+# Stop everything (preserves data)
+docker compose down
+
+# Stop AND delete volumes (completely fresh start next time)
+docker compose down -v
+```
+
+---
+
+## 🔧 Step 2 — Run Manually (Understand Every Piece)
+
+Running manually teaches you **exactly** what each Docker command does — no magic.
+
+### 2a. Clean Up
 
 ```bash
 ./scripts/setup_environments.sh
 ```
 
-What this does:
-- Checks that Docker is available
-- Removes old staging containers (if any exist)
-- Removes old production containers (if any exist)
-- Removes old Docker networks used by this demo
-- Prints the port mappings for reference
+This removes old containers and networks so you start clean.
 
-**Students new to Docker:** This step is optional on first run. It becomes important when you redeploy and want to clean up before a fresh start.
-
-## 3) Test the application locally first
-This is the quickest way to confirm the app works before adding Ansible.
-
-Build both images:
+### 2b. Build the Docker Images
 
 ```bash
-docker build -t student-backend:latest backend
-docker build -t student-frontend:latest frontend
+# Build backend image
+docker build -t student-backend:latest ./backend
+
+# Build frontend image
+docker build -t student-frontend:latest ./frontend
 ```
 
-Run the staging containers:
+**What the Dockerfile does (step by step):**
+
+```dockerfile
+FROM python:3.11-slim          # 1. Start with minimal Python
+WORKDIR /app                    # 2. Set working directory
+COPY requirements.txt .         # 3. Copy dependency list
+RUN pip install -r requirements.txt  # 4. Install packages
+COPY main.py .                  # 5. Copy app code
+EXPOSE 8000                     # 6. Document the port
+CMD ["uvicorn", "main:app", ...] # 7. Set startup command
+```
+
+### 2c. Create a Network
+
+Containers need a private network to talk to each other:
 
 ```bash
-docker network create appnet-staging || true
-
-docker rm -f backend-staging >/dev/null 2>&1 || true
-docker run -d --name backend-staging --network appnet-staging -p 8001:8000 student-backend:latest
-
-docker rm -f frontend-staging >/dev/null 2>&1 || true
-docker run -d --name frontend-staging --network appnet-staging -e API_URL=http://backend-staging:8000 -p 8501:8501 student-frontend:latest
+docker network create appnet
 ```
 
-Verify the staging environment:
+### 2d. Start the Backend
 
 ```bash
-curl -sS http://localhost:8001/ || echo "backend did not respond"
-curl -sS http://localhost:8501/ | head -n 10
+docker run -d \
+  --name backend \
+  --network appnet \
+  -p 8000:8000 \
+  student-backend:latest
 ```
 
-Open the browser:
+**Flag by flag:**
+| Flag | Meaning | Why |
+|------|---------|-----|
+| `-d` | Detached (background) | So your terminal is free |
+| `--name backend` | Give it a name | Frontend finds it by name |
+| `--network appnet` | Attach to network | Can talk to frontend |
+| `-p 8000:8000` | Port mapping | host:container |
 
-```text
-http://localhost:8501
-```
-
-If the backend responds and the UI loads, the app is working.
-
-### 3a) Optional: Bind staging to a specific IP address (not localhost)
-
-By default, Docker binds to `localhost` (127.0.0.1). To access the staging containers from other machines on your network, bind them to your host's IP address.
-
-**Step 1: Find your host's IP address**
-
-On macOS or Linux:
+### 2e. Verify the Backend
 
 ```bash
-ifconfig | grep "inet " | grep -v 127.0.0.1
+# Health check
+curl http://localhost:8000/
+# → {"message":"🎓 Student API is running!","status":"OK"}
+
+# List students
+curl http://localhost:8000/students
+# → {"total":5,"students":[{"id":1,"name":"Alice",...}, ...]}
+
+# Get statistics
+curl http://localhost:8000/stats
+# → {"total_students":5,"average_grade":79.8,"highest_grade":95,"lowest_grade":61}
 ```
 
-Or on Linux specifically:
+### 2f. Start the Frontend
 
 ```bash
-hostname -I
+docker run -d \
+  --name frontend \
+  --network appnet \
+  -e API_URL=http://backend:8000 \
+  -p 8501:8501 \
+  student-frontend:latest
 ```
 
-You should see an IP like `192.168.1.100` or `10.0.0.5`.
+**Critical detail:** The `API_URL=http://backend:8000` tells the frontend where to find the backend. Since both are on `appnet`, they communicate by **container name** (`backend`), not `localhost`. This is called **container networking**.
 
-**Step 2: Run containers with IP binding**
+### 2g. Open the App
 
-Replace `YOUR_HOST_IP` with the actual IP address from Step 1. For example, if your IP is `192.168.1.100`:
+Open **http://localhost:8501** in your browser. You should see the full Student API Explorer.
+
+### 2h. Clean Up
 
 ```bash
-docker network create appnet-staging || true
-
-docker rm -f backend-staging >/dev/null 2>&1 || true
-docker run -d --name backend-staging --network appnet-staging -p 192.168.1.100:8001:8000 student-backend:latest
-
-docker rm -f frontend-staging >/dev/null 2>&1 || true
-docker run -d --name frontend-staging --network appnet-staging -e API_URL=http://backend-staging:8000 -p 192.168.1.100:8501:8501 student-frontend:latest
+docker rm -f backend frontend
+docker network rm appnet
 ```
 
-**Step 3: Access from your IP address**
+---
 
-Now you can access the app from any machine on your network:
+## 🌐 Step 3 — Explore the Backend API
+
+The backend has **6 REST endpoints** covering all CRUD operations plus search and stats.
+
+### All Endpoints
+
+| Method | Endpoint | What It Does | Try This Command |
+|--------|----------|-------------|-----------------|
+| `GET` | `/` | Health check | `curl localhost:8000/` |
+| `GET` | `/students` | List all students | `curl localhost:8000/students` |
+| `GET` | `/students/{id}` | Get one student | `curl localhost:8000/students/1` |
+| `POST` | `/students` | Add a student | *(see below)* |
+| `PUT` | `/students/{id}` | Update a student | *(see below)* |
+| `DELETE` | `/students/{id}` | Delete a student | *(see below)* |
+| `GET` | `/search?subject=Math` | Filter by subject | `curl "localhost:8000/search?subject=Math"` |
+| `GET` | `/stats` | Class statistics | `curl localhost:8000/stats` |
+
+### Hands-On Exercises
+
+**1. Add a new student (POST):**
 
 ```bash
-# From this machine:
-curl -sS http://192.168.1.100:8001/
-
-# From another machine on the network:
-# Open browser: http://192.168.1.100:8501
+curl -X POST http://localhost:8000/students \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Grace","grade":91,"subject":"Math"}'
+# → {"message":"Student created!","student":{"id":6,"name":"Grace",...}}
 ```
 
-**Why bind to an IP?**
-- Access the staging app from another machine on your network (e.g., a colleague's laptop, a mobile device, or a CI/CD runner).
-- Test the app from different clients.
-- Simulate a remote deployment scenario locally.
-
-**Note:** If you bind to a specific IP, the container will NOT be accessible via `localhost:8501` from your local machine — it will only be accessible via the IP address.
-
-## 4) Build infrastructure for staging and production
-The Dockerfiles are the build infrastructure. Use them to create local images and registry tags.
-
-### Build for staging
+**2. Update a student's grade (PUT):**
 
 ```bash
-docker build -t student-backend:latest backend
-docker build -t student-frontend:latest frontend
+curl -X PUT http://localhost:8000/students/1 \
+  -H "Content-Type: application/json" \
+  -d '{"grade":97}'
+# → {"message":"Student updated!","student":{"id":1,"name":"Alice","grade":97,...}}
 ```
 
-### Build and tag for production
+**3. Delete a student (DELETE):**
 
 ```bash
-docker build -t student-backend:latest -t YOURNAME/student-backend:latest backend
-docker build -t student-frontend:latest -t YOURNAME/student-frontend:latest frontend
+curl -X DELETE http://localhost:8000/students/3
+# → {"message":"Student 'Charlie' deleted!"}
 ```
 
-### Push production images to Docker Hub
+**4. Search by subject:**
 
 ```bash
-docker login -u YOUR_DOCKERHUB_USERNAME
-docker push YOURNAME/student-backend:latest
-docker push YOURNAME/student-frontend:latest
+curl "http://localhost:8000/search?subject=Science"
+# → {"subject":"Science","count":2,"students":[...]}
 ```
 
-Or use the helper:
+**5. Check updated stats:**
 
 ```bash
-./scripts/build_and_push.sh your-dockerhub-username
+curl http://localhost:8000/stats
 ```
 
-## 5) Install Ansible on the control node
-The control node is where you run Ansible commands.
+> **Pro tip:** Open http://localhost:8000/docs for an interactive UI where you can click to try every endpoint.
 
-### Linux
+### HTTP Methods Cheat Sheet
+
+| Method | Purpose | Example |
+|--------|---------|---------|
+| `GET` | Read data (safe) | `GET /students` — list all |
+| `POST` | Create new data | `POST /students` — add a student |
+| `PUT` | Update existing data | `PUT /students/1` — change grade |
+| `DELETE` | Remove data | `DELETE /students/3` — remove Charlie |
+
+---
+
+## 🔍 Step 4 — Code Quality & Security Scanning
+
+Before shipping code, run automated checks to catch bugs, security issues, and style problems.
+
+### 4a. Install Scanner Tools
 
 ```bash
-python3 -m pip install --user ansible
-```
+# macOS
+brew install hadolint trivy
+pip3 install ruff mypy bandit
 
-Or on Ubuntu:
-
-```bash
+# Linux (Ubuntu/Debian)
 sudo apt update
-sudo apt install -y ansible
+pip3 install ruff mypy bandit
+# Trivy: https://trivy.dev/latest/getting-started/installation/
+# Hadolint: https://github.com/hadolint/hadolint/releases
 ```
 
-### macOS
+### 4b. Run ALL Checks (One Command)
 
 ```bash
+./scripts/scan.sh
+```
+
+This runs **9 checks** automatically:
+
+| # | Tool | Type | What It Catches |
+|---|------|------|----------------|
+| 1 | **Hadolint** | Dockerfile lint | Unsafe Docker patterns, missing labels |
+| 2 | **Bandit** | Python security | Hardcoded passwords, SQL injection, eval() |
+| 3 | **Ruff** (lint) | Python lint | Syntax errors, unused imports, naming violations |
+| 4 | **Ruff** (format) | Python style | Inconsistent formatting (Black-compatible) |
+| 5 | **mypy** | Type check | Wrong argument types, missing returns |
+| 6 | **Trivy** (filesystem) | Vulnerability | CVEs in Python deps and source code |
+| 7 | **Trivy** (images) | Vulnerability | CVEs in Docker images (requires built images) |
+| 8 | **OWASP DC** | Dependency check | Known vulnerabilities in requirements.txt |
+| 9 | **SonarQube** | Code quality | Code smells, bugs, duplications (requires server) |
+
+### 4c. Interpret the Results
+
+**What a passing check looks like:**
+```
+✅ ruff lint: no issues
+✅ mypy: no type errors
+```
+
+**What a failing check looks like:**
+```
+❌ ruff lint: issues found (run 'ruff check --fix' to auto-fix)
+
+backend/main.py:78:80: E501 Line too long (82 > 79 characters)
+```
+
+### 4d. Run Specific Checks
+
+```bash
+# Just Python linting
+./scripts/scan.sh ruff-lint ruff-format mypy bandit
+
+# Just Docker
+./scripts/scan.sh hadolint
+
+# Quick scan (skip image scanning)
+./scripts/scan.sh --quick
+
+# List everything
+./scripts/scan.sh --list
+```
+
+### 4e. Auto-Fix Issues
+
+```bash
+# Ruff can auto-fix most problems
+ruff check --fix backend/ frontend/
+ruff format backend/ frontend/
+```
+
+### 4f. Run SonarQube (Full Static Analysis)
+
+```bash
+# 1. Start SonarQube
+docker compose up -d sonarqube
+
+# 2. Open http://localhost:9000 (login: admin / admin)
+
+# 3. Generate a token: User → My Account → Security → Generate Token
+
+# 4. Run the scan
+SONAR_TOKEN=your_token_here ./scripts/scan.sh sonar
+```
+
+---
+
+## 📦 Step 5 — Build & Push to Docker Hub
+
+So far you've only run images locally. To deploy with Ansible or Jenkins, push them to Docker Hub.
+
+### 5a. Create a Docker Hub Account
+
+1. Go to https://hub.docker.com
+2. Sign up (free)
+3. Go to **Account Settings → Security → New Access Token**
+4. Create a token with **Read & Write** permissions
+5. **Copy the token** (Docker Hub won't show it again)
+
+### 5b. Log In and Push
+
+```bash
+# Using the helper script (recommended)
+./scripts/build_and_push.sh YOUR_DOCKERHUB_USERNAME
+# It will prompt for your access token (paste it)
+
+# Or manually:
+docker login -u YOUR_DOCKERHUB_USERNAME
+# (paste your access token)
+
+docker build -t YOUR_DOCKERHUB_USERNAME/student-backend:latest ./backend
+docker build -t YOUR_DOCKERHUB_USERNAME/student-frontend:latest ./frontend
+
+docker push YOUR_DOCKERHUB_USERNAME/student-backend:latest
+docker push YOUR_DOCKERHUB_USERNAME/student-frontend:latest
+```
+
+### 5c. Verify
+
+Open https://hub.docker.com/u/YOUR_DOCKERHUB_USERNAME — you should see:
+
+```
+Repositories (2)
+├── YOUR_DOCKERHUB_USERNAME/student-backend   ✅ Pushed
+└── YOUR_DOCKERHUB_USERNAME/student-frontend  ✅ Pushed
+```
+
+### Copy Your Docker Hub Username
+
+You'll need it for the next steps. Save it somewhere:
+
+```
+DOCKER_HUB_USERNAME=___________
+```
+
+---
+
+## 🤖 Step 6 — Deploy with Ansible (Staging → Production)
+
+Ansible automates deployments so they're **repeatable** and **identical** every time.
+
+### What is Ansible Doing?
+
+When you run the deploy command, Ansible connects to the target machine and:
+
+```
+1. REMOVE old containers        → clean slate
+2. CREATE private network       → appnet-staging
+3. PULL backend image           → from Docker Hub (or use local)
+4. RUN backend container        → port 8000 → 8001 (staging)
+5. PULL frontend image          → from Docker Hub (or use local)
+6. RUN frontend container       → port 8501, with API_URL set
+7. VERIFY internal IPs          → inspect with docker inspect
+```
+
+Everything is **idempotent** — run it twice and the second time says `changed=0` (nothing to change).
+
+### 6a. Install Ansible
+
+```bash
+# macOS
 brew install ansible
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y ansible
+
+# Verify
+ansible --version
+
+# Install Docker modules
+ansible-galaxy collection install community.docker
+pip3 install docker
 ```
 
-Verify:
+Or use the included script:
 
 ```bash
-ansible --version
+./scripts/install_ansible.sh
 ```
 
-## 6) Configure staging and production targets
-The inventory file `ansible/hosts` includes both groups.
+### 6b. Understand the Inventory
 
-### Default demo inventory
-- `[staging]` → `localhost`
-- `[production]` → `localhost`
-
-### Real target example
-Replace with actual hostnames or IPs:
+The file `ansible/hosts` defines your target machines:
 
 ```ini
 [staging]
-staging.example.com ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
+localhost ansible_connection=local
 
 [production]
-production.example.com ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
+localhost ansible_connection=local
+
+[staging:vars]
+ui_port=8501
+api_port=8001
+
+[production:vars]
+ui_port=8502
+api_port=8002
 ```
 
-## 7) Prepare environments with Ansible
-Run this first to prepare the target hosts:
+> Both environments point to `localhost` for this demo. In a real setup, these would be IPs of remote servers. Ansible's playbooks work the same either way.
+
+### 6c. Deploy to Staging (Local Images)
 
 ```bash
-ansible-playbook -i ansible/hosts ansible/setup_basics_playbook.yaml
+./scripts/deploy.sh local staging
 ```
 
-What it does:
-- installs common packages on Debian/Ubuntu hosts
-- ensures SSH is running on supported systems
-- creates a `deployer` user on Linux hosts
-- writes a simple server info file
+This one command:
+1. Cleans up old containers
+2. Builds images if they don't exist
+3. Runs the Ansible playbook targeting `staging`
+4. Creates `appnet-staging` network
+5. Starts `backend-staging` (port 8001) and `frontend-staging` (port 8501)
 
-## 8) Deploy staging with Ansible
-
-### Before deployment: verify the current state
-Check what containers exist before you deploy. This ensures you understand what will be replaced.
+### 6d. Deploy to Production (Docker Hub Images)
 
 ```bash
-docker ps -a --filter name=staging
+./scripts/deploy.sh YOUR_DOCKERHUB_USERNAME production
 ```
 
-You should see running staging containers, or see old ones that will be replaced.
-
-Optionally, if you want to inspect a running staging container before redeploying:
+### 6e. Verify the Deployment
 
 ```bash
-docker ps -a --filter name=backend-staging
-docker exec -it backend-staging /bin/bash
-# Inside the container, you can inspect files and processes
-# Type 'exit' to leave the container
+# Check containers are running
+docker ps --filter name=staging
+docker ps --filter name=production
+
+# Test staging API
+curl http://localhost:8001/
+
+# Test production API
+curl http://localhost:8002/
+
+# Check logs
+docker logs backend-staging --tail 20
+docker logs frontend-staging --tail 20
 ```
 
-**Note:** `docker exec -it` enters an existing running container. `docker run -it` would try to create a NEW container from an image (which doesn't exist locally).
+### 6f. Open in Your Browser
 
-If you have old containers running, the Ansible playbook will remove them automatically.
+| Environment | UI | API Docs |
+|-------------|-----|---------|
+| **Staging** | http://localhost:8501 | http://localhost:8001/docs |
+| **Production** | http://localhost:8502 | http://localhost:8002/docs |
 
-### Deploy using locally built images
+### 6g. Promote from Staging to Production
+
+This is the CI/CD concept of **promotion** — the exact same images flow through environments:
 
 ```bash
-ansible-playbook -i ansible/hosts ansible/deploy_stack_playbook.yaml -e target=staging
+# Step 1: Deploy to staging
+./scripts/deploy.sh YOUR_USERNAME staging
+
+# Step 2: Test staging (curl, browser, etc.)
+curl http://localhost:8001/stats
+
+# Step 3: Deploy SAME images to production
+./scripts/deploy.sh YOUR_USERNAME production
+
+# Step 4: Verify production
+curl http://localhost:8002/stats
 ```
 
-### Deploy staging from Docker Hub
+No copy-paste. No environment-specific scripts. The same playbook, same images, different target.
+
+### 6h. Run the Complete Check Script
 
 ```bash
-ansible-playbook -i ansible/hosts ansible/deploy_stack_playbook.yaml -e target=staging -e dh_user=YOURNAME
+./scripts/check_staging.sh
 ```
 
-### Deploy staging with a specific IP address (optional)
+This runs: container status → process list → logs → host checks → network checks → HTTP responses.
 
-To bind the staging containers to a specific IP address instead of localhost, edit `ansible/deploy_stack_playbook.yaml` and modify the `published_ports` section.
+---
 
-**Before (default — uses localhost):**
-```yaml
-published_ports:
-  - "{{ api_port }}:8000"
-```
+## 🔄 Step 7 — CI/CD with Jenkins (Full Automation)
 
-**After (bind to a specific IP):**
-```yaml
-published_ports:
-  - "192.168.1.100:{{ api_port }}:8000"
-  - "192.168.1.100:{{ ui_port }}:8501"
-```
+Now automate the **entire pipeline**: every code change triggers build → test → scan → push → deploy automatically.
 
-Replace `192.168.1.100` with your host's actual IP address (find it with `ifconfig` or `hostname -I`).
-
-Then deploy as usual:
+### 7a. Start Jenkins
 
 ```bash
-ansible-playbook -i ansible/hosts ansible/deploy_stack_playbook.yaml -e target=staging
+docker compose up -d jenkins
 ```
 
-### After deployment: verify the deployment
-
-1. Check that new staging containers are running:
-
-```bash
-docker ps -a --filter name=staging
-```
-
-You should see:
-- `backend-staging` — running, with port `8001:8000` mapped
-- `frontend-staging` — running, with port `8501:8501` mapped
-
-2. Inspect the backend container to verify it started correctly:
-
-```bash
-docker logs backend-staging
-```
-
-Look for messages like "Application startup complete" or "listening on 0.0.0.0:8000".
-
-3. Inspect the frontend container:
-
-```bash
-docker logs frontend-staging
-```
-
-Look for Streamlit startup messages.
-
-4. Verify backend responds:
-
-```bash
-curl -sS http://localhost:8001/ || echo "backend did not respond"
-```
-
-5. Verify the frontend UI responds:
-
-```bash
-curl -sS http://localhost:8501/ | head -n 10
-```
-
-6. Open the app in your browser:
-
-```text
-http://localhost:8501
-```
-
-7. Enter the running backend container and verify the environment and files:
-
-```bash
-docker exec -it backend-staging /bin/bash
-# Inside the container, you can run commands:
-env | grep -E 'PATH|PYTHONPATH|API'
-ls -la /app
-exit
-```
-
-If the frontend loads, both endpoints respond, and you see the expected logs and files, staging deployment is successful.
-
-## 9) Deploy production with Ansible
-Deploy production with its separate ports and container names.
-
-### Before deployment: verify the current state
-
-Check for any existing production containers:
-
-```bash
-docker ps -a --filter name=production
-```
-
-If old production containers are running, the playbook will remove them.
-
-### Deploy production using Ansible
-
-```bash
-ansible-playbook -i ansible/hosts ansible/deploy_stack_playbook.yaml -e target=production -e dh_user=YOURNAME
-```
-
-Production ports:
-- backend-production → `8002`
-- frontend-production → `8502`
-
-### After deployment: verify production is running
-
-1. Check containers are up:
-
-```bash
-docker ps -a --filter name=production
-```
-
-You should see:
-- `backend-production` — running, port `8002:8000` mapped
-- `frontend-production` — running, port `8502:8501` mapped
-
-2. Inspect backend logs:
-
-```bash
-docker logs backend-production
-```
-
-3. Inspect frontend logs:
-
-```bash
-docker logs frontend-production
-```
-
-4. Verify backend responds:
-
-```bash
-curl -sS http://localhost:8002/ || echo "production backend did not respond"
-```
-
-5. Verify frontend responds:
-
-```bash
-curl -sS http://localhost:8502/ | head -n 10
-```
-
-6. Open the app in your browser:
-
-```text
-http://localhost:8502
-```
-
-7. Inspect running container files:
-
-```bash
-docker exec -it backend-production env
-docker exec -it backend-production ls -la /app
-```
-
-If the UI loads, endpoints respond, and logs show no errors, production is deployed successfully.
-
-## 10) More Ansible deployment details
-The deploy playbook:
-- removes existing target containers
-- creates `appnet-<target>` Docker network
-- runs backend and frontend containers with correct networking
-- sets `API_URL` inside frontend
-- performs health checks on the internal network and public ports
-
-Use `-e dh_user=YOURNAME` when you want Ansible to pull registry images instead of using local ones.
-
-## 11) End-to-end CI/CD workflow with Jenkins
-
-This is where the full automation comes together. Every time you commit and push code, Jenkins automatically:
-1. **Detects the change** (via GitHub polling)
-2. **Checks out the code**
-3. **Builds both Docker images** (backend + frontend)
-4. **Tests the images**
-5. **Pushes to Docker Hub**
-6. **Ansible can then deploy** the published images to staging/production
-
-### Start Jenkins with docker compose
-
-Jenkins is included in `docker-compose.yml`. Start it with:
-
-```bash
-docker compose up -d
-```
-
-This starts:
-- Your backend on `localhost:8000`
-- Your frontend on `localhost:8501`
-- **Jenkins on `localhost:8080`** ← the CI/CD server
-
-### Access Jenkins for the first time
-
-1. Open `http://localhost:8080` in your browser
-2. Get the admin password:
+Open **http://localhost:8080** and unlock:
 
 ```bash
 docker logs jenkins | grep -i "password"
+# → Please use the following password to proceed to installation: a1b2c3d4e5...
 ```
 
-You'll see something like:
-```
-Please use the following password to proceed to installation: a1b2c3d4e5f6g7h8i9j0k1l2
-```
+1. Paste the password → **Install suggested plugins** (wait 2-3 minutes)
+2. Create admin user (e.g., `admin` / `admin`)
 
-3. Copy the password, paste it into the unlock form
-4. Click **Install suggested plugins** (wait a few minutes)
-5. Create your first admin user
+### 7b. Configure Jenkins (One-Time)
 
-### Set up Jenkins for this repo
+**1. Install Docker Pipeline plugin:**
+- Manage Jenkins → Plugins → Available plugins
+- Search **"Docker Pipeline"** → Install
 
-After unlock and plugin installation:
+**2. Add Docker Hub credentials:**
+- Manage Jenkins → Credentials → System → Global → Add Credentials
+- Kind: **Username with password**
+- ID: `dockerhub` (must match what the Jenkinsfile expects)
+- Username: your Docker Hub username
+- Password: your Docker Hub **access token** (not your login password)
 
-1. Click **Create a job**
-2. Enter job name: `student-app-pipeline`
+**3. Add SonarQube token (optional):**
+- Same process, ID: `sonar-token`, Kind: **Secret text**
+
+### 7c. Create the Pipeline Job
+
+1. Click **New Item**
+2. Name: `student-app-pipeline`
 3. Select **Pipeline**
-4. Click **OK**
-5. Under **Pipeline**, select **Pipeline script from SCM**
-6. Select **Git** as SCM
-7. Enter your repo URL:
-   - If public: `https://github.com/YOUR_USERNAME/Lesson11-C270-Jenkins-Docker-Ansible`
-   - If private: Use GitHub personal access token (PAT) in credentials
-8. Set **Script Path** to `Jenkinsfile` (default)
-9. Under **Build Triggers**, check **Poll SCM**
-10. Set schedule to `H/2 * * * *` (polls every ~2 minutes for changes)
-11. Click **Save**
+4. Scroll to **Pipeline** section
+5. Definition: **Pipeline script from SCM**
+6. SCM: **Git**
+7. Repository URL: your repo URL
+8. Script Path: `Jenkinsfile`
+9. Click **Save**
 
-### Configure Docker Hub credentials in Jenkins
+### 7d. Run the Pipeline
 
-The Jenkinsfile needs your Docker Hub username and password to push images.
+1. Click **Build with Parameters**
+2. Set these values:
 
-1. In Jenkins, go to **Manage Jenkins** → **Manage Credentials**
-2. Click **System** → **Global credentials**
-3. Click **Add Credentials**
-4. Select **Username with password**
-5. Fill in:
-   - **Username:** your Docker Hub username
-   - **Password:** your Docker Hub access token (or password)
-   - **ID:** `dockerhub` ← must match the Jenkinsfile
-6. Click **Create**
+| Parameter | Your Value |
+|-----------|-----------|
+| `DOCKER_USER` | Your Docker Hub username |
+| `DEPLOY_TARGET` | `staging` (or `none` to skip deploy) |
+| `SKIP_SONAR` | ✅ checked (unless SonarQube is running) |
+| `SKIP_SECURITY_SCAN` | ⬜ unchecked |
 
-### Update the Jenkinsfile for your Docker Hub username
+3. Click **Build**
 
-Edit the `Jenkinsfile` in the repo root:
+### 7e. Watch the Pipeline Execute
 
-```groovy
-environment {
-    DOCKER_USER    = 'your-dockerhub-username'          // <-- CHANGE TO YOUR USERNAME
-    BACKEND_IMAGE  = "${DOCKER_USER}/student-backend"
-    FRONTEND_IMAGE = "${DOCKER_USER}/student-frontend"
-    TAG            = "${BUILD_NUMBER}"
-}
+Each stage shows a colored status:
+
+```
+ ✅ Checkout           → Pulls latest code from GitHub
+ ✅ Code Quality       → Hadolint, Ruff, mypy, Bandit run in parallel
+ ✅ Build Images       → Backend + Frontend build in parallel
+ ✅ Test Backend       → Smoke tests the API
+ ✅ Security Scan      → Trivy + OWASP scan source + images
+ ⏭️ SonarQube          → Skipped (SKIP_SONAR was checked)
+ ✅ Quality Gate       → Checks vulnerability thresholds
+ ✅ Push to Docker Hub → Pushes :latest and :build-number tags
+ ✅ Deploy (smoke)     → Local docker run test
+ ✅ Deploy via Ansible → Deploys to staging/production
 ```
 
-Replace `your-dockerhub-username` with your actual Docker Hub username.
+### 7f. Configure Automatic Triggers
 
-Commit and push this change:
+The Jenkinsfile already polls GitHub every 2 minutes (`pollSCM('H/2 * * * *')`). Any new commit automatically starts a build.
+
+**For instant triggers (recommended):**
+
+1. GitHub repo → **Settings** → **Webhooks** → **Add webhook**
+2. Payload URL: `http://YOUR_IP:8080/github-webhook/`
+3. Content type: `application/json`
+4. Events: **Just the push event**
+5. In Jenkins job → **Configure** → **Build Triggers** → Check **"GitHub hook trigger for GITScm polling"**
+
+### 7g. Pipeline Parameters Reference
+
+| Parameter | Options | Default | When To Change |
+|-----------|---------|---------|---------------|
+| `DOCKER_USER` | Your Docker Hub username | (placeholder) | Every build — set to your username |
+| `DEPLOY_TARGET` | `none`, `staging`, `production` | `none` | Set `staging` when ready to deploy |
+| `SKIP_SONAR` | `true`, `false` | `false` | Check if SonarQube not running |
+| `SKIP_SECURITY_SCAN` | `true`, `false` | `false` | Check for quick dev builds |
+
+### 7h. What Happens When You Change Code
+
+```
+1. You edit backend/main.py (add a new endpoint)
+2. git add . && git commit -m "Add new endpoint"
+3. git push origin main
+4. Jenkins detects the change (≤2 min via poll, instantly via webhook)
+5. Pipeline runs: lint → build → test → scan → quality gate → push → deploy
+6. Your new endpoint is live on staging in ~3-5 minutes
+7. After verification, trigger a production deploy
+```
+
+---
+
+## ✅ Step 8 — Verify & Monitor Everything
+
+### 8a. Quick Health Check
 
 ```bash
-git add Jenkinsfile
-git commit -m "Update Jenkins with Docker Hub username"
-git push origin main
+# Are all containers running?
+docker ps
+
+# You should see:
+# CONTAINER ID   NAMES                PORTS
+# abc123         backend-staging      0.0.0.0:8001->8000/tcp
+# def456         frontend-staging     0.0.0.0:8501->8501/tcp
+# ghi789         backend-production   0.0.0.0:8002->8000/tcp
+# jkl012         frontend-production  0.0.0.0:8502->8501/tcp
 ```
+
+### 8b. Test All Endpoints
+
+```bash
+# Staging
+curl -s http://localhost:8001/ | python3 -m json.tool
+curl -s http://localhost:8001/students | python3 -m json.tool
+
+# Production
+curl -s http://localhost:8002/ | python3 -m json.tool
+curl -s http://localhost:8002/stats | python3 -m json.tool
+```
+
+### 8c. Check Logs
+
+```bash
+# See recent logs
+docker logs backend-staging --tail 50
+docker logs frontend-staging --tail 50
+
+# Follow logs in real-time (Ctrl+C to stop)
+docker logs -f backend-production
+```
+
+### 8d. Inspect a Running Container
+
+```bash
+# Enter the container (like SSH)
+docker exec -it backend-staging /bin/bash
+
+# Inside you can:
+ls -la /app              # See the app files
+env | grep -i api        # Check environment variables
+cat /app/main.py         # Read the source code
+exit                     # Leave the container
+```
+
+### 8e. Port Mapping Reference
+
+```
+┌─────────────────┬────────────┬────────────┬──────────────────────────────┐
+│  Service        │  Container │  Host      │  URL                         │
+├─────────────────┼────────────┼────────────┼──────────────────────────────┤
+│ Backend (dev)   │  :8000     │  :8000     │  http://localhost:8000/docs   │
+│ Frontend (dev)  │  :8501     │  :8501     │  http://localhost:8501        │
+│ Jenkins         │  :8080     │  :8080     │  http://localhost:8080        │
+│ SonarQube       │  :9000     │  :9000     │  http://localhost:9000        │
+│ Staging API     │  :8000     │  :8001     │  http://localhost:8001/docs   │
+│ Staging UI      │  :8501     │  :8501     │  http://localhost:8501        │
+│ Production API  │  :8000     │  :8002     │  http://localhost:8002/docs   │
+│ Production UI   │  :8501     │  :8502     │  http://localhost:8502        │
+└─────────────────┴────────────┴────────────┴──────────────────────────────┘
+```
+
+### 8f. Run the Health Check Script
+
+```bash
+./scripts/check_staging.sh
+```
+
+This comprehensive script checks: container status → process health → recent logs → network connectivity → HTTP responses.
+
+---
+
+## 🧩 How Everything Fits Together
+
+### The Full Software Lifecycle
+
+```
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │                    THE FULL LIFECYCLE (8 Steps)                         │
+ └─────────────────────────────────────────────────────────────────────────┘
+
+ 1. CODE          You write Python in backend/main.py or frontend/app.py
+    │
+    ▼
+ 2. LINT & SCAN   ./scripts/scan.sh
+    │              Ruff checks syntax. mypy checks types. Bandit checks
+    │              security. Hadolint checks Dockerfiles. Fix any issues.
+    ▼
+ 3. BUILD         docker build -t student-backend:latest ./backend
+    │              docker build -t student-frontend:latest ./frontend
+    ▼
+ 4. TEST          curl http://localhost:8000/   (smoke test)
+    │              curl http://localhost:8000/students
+    ▼
+ 5. SHIP          ./scripts/build_and_push.sh YOUR_USERNAME
+    │              Push images to Docker Hub
+    ▼
+ 6. DEPLOY        ./scripts/deploy.sh YOUR_USERNAME staging
+    │              Ansible pulls images and starts containers
+    ▼
+ 7. VERIFY        curl http://localhost:8501/   (open browser)
+    │              docker logs backend-staging
+    ▼
+ 8. PROMOTE       ./scripts/deploy.sh YOUR_USERNAME production
+                  Same images, same playbook, different target
+```
+
+### With Jenkins Automation
+
+Steps 2-8 happen **automatically** on every code change:
+
+```
+Git Push → Jenkins detects → runs pipeline → deploys to staging
+                                                           │
+                                    You verify staging ───┘
+                                                           │
+                                    Trigger production ────┘
+```
+
+### Key Concepts Summary
+
+| Concept | Meaning | Real-World Example |
+|---------|---------|-------------------|
+| **Containerization** | Package app + dependencies into a portable image | "It works on my machine" → it works everywhere |
+| **Two-Tier Architecture** | Separate backend (API) from frontend (UI) | Update UI without changing API, or vice versa |
+| **CI/CD** | Automatically build, test, and deploy on every code change | Catch bugs in staging before they reach production |
+| **Shift Left** | Run security scans early in the pipeline | Fix a vulnerability at commit time, not after deploy |
+| **Quality Gate** | Automated pass/fail check before deployment | Pipeline stops if Trivy finds critical CVEs |
+| **Idempotency** | Running the same script repeatedly gives the same result | Re-run Ansible safely — `changed=0` on second run |
+| **Promotion** | Same artifacts flow through dev → staging → production | What you tested in staging is exactly what runs in prod |
+| **Infrastructure as Code** | Environments defined in YAML/playbooks | `ansible/hosts` + `deploy_stack_playbook.yaml` |
+
+### Tools Used in This Project
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                          TOOLCHAIN SUMMARY                           │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  🐳 Docker          ─  Container runtime + image building             │
+│  🐳 Docker Compose  ─  One-command local environment                  │
+│  🐳 Docker Hub      ─  Container image registry                      │
+│                                                                      │
+│  🤖 Ansible         ─  Automation: deploy containers to environments  │
+│                                                                      │
+│  🔄 Jenkins         ─  CI/CD: automate the entire pipeline           │
+│                                                                      │
+│  🔍 SonarQube       ─  Code quality analysis (LGPL v3)               │
+│  🛡️ Trivy           ─  Vulnerability scanner (Apache 2.0)            │
+│  🐳 Hadolint        ─  Dockerfile linter (GPL v3)                    │
+│  🐍 Ruff            ─  Python linter + formatter (MIT)               │
+│  🐍 mypy            ─  Python type checker (MIT)                     │
+│  🐍 Bandit          ─  Python security linter (Apache 2.0)           │
+│  📦 OWASP DC        ─  Dependency vulnerability checker (Apache 2.0) │
+│                                                                      │
+│  🐍 FastAPI         ─  Python web framework (backend)                │
+│  🎨 Streamlit       ─  Python web framework (frontend)               │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Docker Won't Start
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `docker: command not found` | Docker not installed | Install [Docker Desktop](https://docs.docker.com/get-docker/) |
+| `Cannot connect to the Docker daemon` | Docker not running | Start Docker Desktop |
+| `docker: 'compose' is not a docker command` | Old Docker version | Upgrade Docker or use `docker-compose` (with hyphen) |
+
+### Port Already in Use
+
+```bash
+Error: driver failed programming external connectivity on endpoint
+       (port is already allocated)
+```
+
+**Fix:** Find and stop whatever is using the port:
+
+```bash
+lsof -i :8501        # Find process on port 8501
+kill -9 <PID>        # Kill it
+# Or use a different port by editing docker-compose.yml
+```
+
+### Frontend Shows "Could Not Reach the API"
+
+```
+❌ Could not reach the API. Is the backend running?
+```
+
+**Most common causes:**
+1. Backend container not running → `docker ps` — restart it
+2. Wrong `API_URL` → Check the environment variable: `docker inspect frontend`
+3. Containers on different networks → Both must be on the same `appnet`
+
+**Debug step by step:**
+```bash
+# 1. Is the backend running?
+docker ps | grep backend
+
+# 2. Can the frontend reach the backend?
+docker exec frontend curl -s http://backend:8000/ 2>/dev/null || echo "Cannot reach backend"
+
+# 3. What network are they on?
+docker inspect backend --format '{{json .NetworkSettings.Networks}}'
+docker inspect frontend --format '{{json .NetworkSettings.Networks}}'
+```
+
+### Container Exits Immediately
+
+```bash
+docker logs backend-staging
+# → uvicorn error: [Errno 98] Address already in use
+```
+
+**Fix:** Another process is using port 8000. Stop it or use a different port.
+
+### Ansible Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `community.docker` not found | Collection not installed | `ansible-galaxy collection install community.docker` |
+| `Failed to import docker` | Python SDK missing | `pip3 install docker` |
+| `container already in use` | Old container exists | `docker rm -f <name>` or `./scripts/setup_environments.sh` |
+
+### Jenkins Pipeline Failures
+
+| Stage Fails | Likely Cause | Fix |
+|-------------|-------------|-----|
+| **Push to Docker Hub** | No credentials in Jenkins | Add `dockerhub` credential (Username with password) |
+| **SonarQube** | Server not running | Start SonarQube or check `SKIP_SONAR` parameter |
+| **Quality Gate** | Too many vulnerabilities | Check Trivy reports, fix HIGH/CRITICAL issues |
+| **Deploy via Ansible** | Ansible not installed | Install Ansible on the Jenkins agent |
+
+### Clean Up Everything
+
+```bash
+# Remove demo containers and networks
+./scripts/setup_environments.sh
+
+# Remove ALL containers (use with caution)
+docker rm -f $(docker ps -aq) 2>/dev/null || true
+
+# Remove compose services + volumes
+docker compose down -v
+
+# Clean up unused Docker resources
+docker system prune -f
+```
+
+---
+
+## 📚 Learn More
+
+| Resource | What It Covers |
+|----------|---------------|
+| 📄 **`docs/JENKINS_PIPELINE.md`** | Step-by-step Jenkins setup from scratch |
+| 📄 **`docs/ANSIBLE_DEPLOY.md`** | Deep dive into Ansible concepts and patterns |
+| 🛠️ **`scripts/scan.sh --list`** | All available scanning checks |
+| 📄 **`Jenkinsfile`** | The complete pipeline definition |
+| 📄 **`pyproject.toml`** | Python linting configuration |
+
+---
+
+> 💡 **Pro tip:** Start with **Step 1** (Docker Compose) to see the app working in 30 seconds. Then go through **Steps 2-3** (Manual + API) to understand the pieces. Once you're comfortable, work through **Steps 4-7** for the full CI/CD experience.
 
 ### See Jenkins in action
 

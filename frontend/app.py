@@ -4,8 +4,9 @@
 # ============================================================
 
 import os
-import streamlit as st
+
 import requests
+import streamlit as st
 
 # ── Base URL of our FastAPI backend ──────────────────────────
 # Read from an environment variable so the same image works whether
@@ -80,11 +81,11 @@ if page == "🏠 Home — Health Check":
     st.header("Health Check")
     st.info("This is the simplest API call — it just asks the server 'are you alive?'")
 
-    st.code(f'GET  {API_URL}/', language="text")
+    st.code(f"GET  {API_URL}/", language="text")
 
     if st.button("🚀 Send Request"):
         try:
-            r = requests.get(f"{API_URL}/")
+            r = requests.get(f"{API_URL}/", timeout=10)
             show_response("GET", f"{API_URL}/", r)
         except Exception:
             st.error("❌ Could not reach the API. Is the backend running?")
@@ -95,14 +96,15 @@ elif page == "📋 GET — All Students":
     st.header("Get All Students")
     st.info("Returns a list of **every student** stored in the database.")
 
-    st.code(f'GET  {API_URL}/students', language="text")
+    st.code(f"GET  {API_URL}/students", language="text")
 
     if st.button("🚀 Send Request"):
-        r = requests.get(f"{API_URL}/students")
+        r = requests.get(f"{API_URL}/students", timeout=10)
         show_response("GET", f"{API_URL}/students", r)
 
         if r.status_code == 200:
             import pandas as pd
+
             students = r.json()["students"]
             st.markdown("### 📊 As a Table")
             st.dataframe(pd.DataFrame(students), use_container_width=True)
@@ -118,7 +120,7 @@ elif page == "🔍 GET — One Student":
     st.code(f"GET  {url}", language="text")
 
     if st.button("🚀 Send Request"):
-        r = requests.get(url)
+        r = requests.get(url, timeout=10)
         show_response("GET", url, r)
 
 
@@ -132,7 +134,7 @@ elif page == "🔎 SEARCH — By Subject":
     st.code(f"GET  {url}", language="text")
 
     if st.button("🚀 Send Request"):
-        r = requests.get(url)
+        r = requests.get(url, timeout=10)
         show_response("GET", url, r)
 
 
@@ -145,17 +147,17 @@ elif page == "📊 GET — Stats":
     st.code(f"GET  {url}", language="text")
 
     if st.button("🚀 Send Request"):
-        r = requests.get(url)
+        r = requests.get(url, timeout=10)
         show_response("GET", url, r)
 
         if r.status_code == 200:
             data = r.json()
             st.divider()
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("👥 Total",   data["total_students"])
+            c1.metric("👥 Total", data["total_students"])
             c2.metric("📈 Average", data["average_grade"])
             c3.metric("🏆 Highest", data["highest_grade"])
-            c4.metric("📉 Lowest",  data["lowest_grade"])
+            c4.metric("📉 Lowest", data["lowest_grade"])
 
 
 # ── 6. Add Student ────────────────────────────────────────────
@@ -164,17 +166,17 @@ elif page == "➕ POST — Add Student":
     st.info("**POST** sends a **JSON body** to the server to create new data.")
 
     with st.form("add_form"):
-        name    = st.text_input("Name",    value="Frank")
-        grade   = st.slider("Grade", 0, 100, 80)
+        name = st.text_input("Name", value="Frank")
+        grade = st.slider("Grade", 0, 100, 80)
         subject = st.selectbox("Subject", ["Math", "Science", "History"])
-        submit  = st.form_submit_button("🚀 Send POST Request")
+        submit = st.form_submit_button("🚀 Send POST Request")
 
     payload = {"name": name, "grade": grade, "subject": subject}
     st.markdown("**JSON body that will be sent:**")
     st.json(payload)
 
     if submit:
-        r = requests.post(f"{API_URL}/students", json=payload)
+        r = requests.post(f"{API_URL}/students", json=payload, timeout=10)
         show_response("POST", f"{API_URL}/students", r)
 
 
@@ -185,17 +187,19 @@ elif page == "✏️ PUT — Update Student":
 
     with st.form("update_form"):
         student_id = st.number_input("Student ID to update", min_value=1, value=1, step=1)
-        new_name   = st.text_input("New name (leave blank to keep)")
-        new_grade  = st.number_input("New grade (0 = skip)", min_value=0, max_value=100, value=0)
-        submit     = st.form_submit_button("🚀 Send PUT Request")
+        new_name = st.text_input("New name (leave blank to keep)")
+        new_grade = st.number_input("New grade (0 = skip)", min_value=0, max_value=100, value=0)
+        submit = st.form_submit_button("🚀 Send PUT Request")
 
     if submit:
         payload = {}
-        if new_name:  payload["name"]  = new_name
-        if new_grade: payload["grade"] = new_grade
+        if new_name:
+            payload["name"] = new_name
+        if new_grade:
+            payload["grade"] = new_grade
 
         url = f"{API_URL}/students/{student_id}"
-        r = requests.put(url, json=payload)
+        r = requests.put(url, json=payload, timeout=10)
         show_response("PUT", url, r)
 
 
@@ -210,5 +214,5 @@ elif page == "🗑️ DELETE — Remove Student":
 
     st.warning("⚠️ This will remove the student from the database!")
     if st.button("🗑️ Send DELETE Request"):
-        r = requests.delete(url)
+        r = requests.delete(url, timeout=10)
         show_response("DELETE", url, r)

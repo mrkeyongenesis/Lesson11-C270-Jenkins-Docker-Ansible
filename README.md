@@ -59,21 +59,21 @@ This is a **two-tier web application** — a backend API and a frontend UI that 
        ▼  http://localhost:8501
   ┌──────────────────────┐
   │  Streamlit Frontend  │  (app.py)
-  │  Port :8501           │
+  │  Port :8501          │
   └─────────┬────────────┘
        │  HTTP GET /students
        │  HTTP POST /students
        ▼  http://backend:8000
   ┌──────────────────────┐
   │  FastAPI Backend     │  (main.py)
-  │  Port :8000           │
+  │  Port :8000          │
   └─────────┬────────────┘
        │
        ▼  In-memory Python list
   ┌──────────────────────┐
-  │  Student Database     │
-  │  5 students (Alice,   │
-  │  Bob, Charlie, ...)   │
+  │  Student Database    │
+  │  5 students (Alice,  │
+  │  Bob, Charlie, ...)  │
   └──────────────────────┘
 ```
 
@@ -89,7 +89,7 @@ This is a **two-tier web application** — a backend API and a frontend UI that 
 
 ```
                     ┌──────────────────────┐
-   Git Push ───────▶│   JENKINS PIPELINE    │
+   Git Push ───────▶│   JENKINS PIPELINE   │
                     └──────────────────────┘
                             │
          ┌──────────────────┼──────────────────┐
@@ -237,20 +237,6 @@ docker compose up --build
 │  🎓 Student API Explorer                                        │
 │  ───────────────────────────────────────────────                │
 │                                                                 │
-│  ┌─────────────┐   ┌────────────────────────────────────────┐  │
-│  │ 🏠 Home     │   │  📋 All Students                       │  │
-│  │ 📋 All Std. │   │  ──────────────────────────             │  │
-│  │ 🔍 One Std. │   │  GET /students                          │  │
-│  │ 🔎 Search   │   │                                        │  │
-│  │ 📊 Stats    │   │  [🚀 Send Request]                      │  │
-│  │ ➕ POST     │   │                                        │  │
-│  │ ✏️ PUT      │   │  Response: Status 200                   │  │
-│  │ 🗑️ DELETE   │   │  {"total":5,"students":[               │  │
-│  └─────────────┘   │    {"id":1,"name":"Alice",...},         │  │
-│                    │    {"id":2,"name":"Bob",...},            │  │
-│                    │    ...                                   │  │
-│                    │  ]}                                      │  │
-│                    └────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -892,14 +878,14 @@ exit                     # Leave the container
 ┌─────────────────┬────────────┬────────────┬──────────────────────────────┐
 │  Service        │  Container │  Host      │  URL                         │
 ├─────────────────┼────────────┼────────────┼──────────────────────────────┤
-│ Backend (dev)   │  :8000     │  :8000     │  http://localhost:8000/docs   │
-│ Frontend (dev)  │  :8501     │  :8501     │  http://localhost:8501        │
-│ Jenkins         │  :8080     │  :8080     │  http://localhost:8080        │
-│ SonarQube       │  :9000     │  :9000     │  http://localhost:9000        │
-│ Staging API     │  :8000     │  :8001     │  http://localhost:8001/docs   │
-│ Staging UI      │  :8501     │  :8501     │  http://localhost:8501        │
-│ Production API  │  :8000     │  :8002     │  http://localhost:8002/docs   │
-│ Production UI   │  :8501     │  :8502     │  http://localhost:8502        │
+│ Backend (dev)   │  :8000     │  :8000     │  http://localhost:8000/docs  │
+│ Frontend (dev)  │  :8501     │  :8501     │  http://localhost:8501       │
+│ Jenkins         │  :8080     │  :8080     │  http://localhost:8080       │
+│ SonarQube       │  :9000     │  :9000     │  http://localhost:9000       │
+│ Staging API     │  :8000     │  :8001     │  http://localhost:8001/docs  │
+│ Staging UI      │  :8501     │  :8501     │  http://localhost:8501       │
+│ Production API  │  :8000     │  :8002     │  http://localhost:8002/docs  │
+│ Production UI   │  :8501     │  :8502     │  http://localhost:8502       │
 └─────────────────┴────────────┴────────────┴──────────────────────────────┘
 ```
 
@@ -955,7 +941,7 @@ Steps 2-8 happen **automatically** on every code change:
 ```
 Git Push → Jenkins detects → runs pipeline → deploys to staging
                                                            │
-                                    You verify staging ───┘
+                                    You verify staging ────┘
                                                            │
                                     Trigger production ────┘
 ```

@@ -4,6 +4,8 @@ A complete, self-contained guide to building a sample Flask web app and running 
 
 This adapts the Cisco DEVASC "Build a CI/CD Pipeline Using Jenkins" lab to Codespaces and extends it with container packaging, registry deployment, and Ansible-driven delivery (drawing on the Cisco Ansible labs). The key differences from the VM version are called out as **Codespaces notes** throughout.
 
+> ⚡ **This manual setup is now automated.** The repo's `docker compose up -d --build jenkins` boots a Jenkins that configures itself — plugins, credentials (Docker Hub token, GitHub PAT, SonarQube token, Nexus login), and the pipeline job are all imported from your `.env` via Configuration as Code (`jenkins/casc/jenkins.yaml`). See **Step 8** of the root [README](../README.md). Work through this guide when you want to understand *what* that automation is doing under the hood.
+
 > **Two ways to use this guide:**
 > - **Learn the concepts step by step** with the simple Flask app in `jenkins-app/` (Parts 1–8 below). Best for understanding what a pipeline *is*.
 > - **Use the real pipeline** for this repo's actual two-tier app: the repo root contains a ready-made **`Jenkinsfile`** that auto-builds and pushes *both* the FastAPI backend and Streamlit frontend images to Docker Hub on every commit. Once you understand the basics here, point a Jenkins **Pipeline → "Pipeline script from SCM"** job at your fork and it uses that `Jenkinsfile` directly — no copy-pasting. See "Using the repo Jenkinsfile" at the end of this guide.

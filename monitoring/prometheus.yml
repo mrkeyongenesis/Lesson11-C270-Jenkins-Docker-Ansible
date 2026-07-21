@@ -1,0 +1,45 @@
+# ============================================================
+#  Prometheus scrape configuration
+#  Started by:  docker compose --profile monitoring up -d
+#  UI:          http://localhost:9090  (Status → Targets)
+# ============================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus monitors itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # The dev backend running via docker compose (service name = backend).
+  # The FastAPI app exposes /metrics via prometheus-fastapi-instrumentator.
+  - job_name: "student-backend-dev"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          environment: "dev"
+
+  # Staging + production backends deployed by Ansible live on their own
+  # Docker networks, so we scrape them through the published host ports.
+  # (host.docker.internal resolves to your machine from inside a container.)
+  - job_name: "student-backend-staging"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8001"]
+        labels:
+          environment: "staging"
+
+  - job_name: "student-backend-production"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8002"]
+        labels:
+          environment: "production"
+
+  # cAdvisor — per-container CPU / memory / network metrics
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]

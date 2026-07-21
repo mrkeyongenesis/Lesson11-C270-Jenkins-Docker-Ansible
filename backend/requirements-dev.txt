@@ -1,0 +1,6 @@
+# Test-only dependencies (NOT installed into the Docker image).
+# Used by the "Unit Tests" pipeline stage and for local test runs:
+#   pip3 install -r backend/requirements.txt -r backend/requirements-dev.txt
+#   pytest backend/ -v
+pytest
+httpx

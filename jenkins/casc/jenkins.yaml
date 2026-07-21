@@ -1,0 +1,95 @@
+# ============================================================
+#  Jenkins Configuration as Code (JCasC)
+#
+#  This file configures Jenkins AUTOMATICALLY on startup:
+#   1. Creates the admin user            (from .env)
+#   2. Imports ALL credentials           (Docker Hub token, GitHub PAT,
+#                                         SonarQube token, Nexus login)
+#   3. Creates the pipeline job          (student-app-pipeline, pointing
+#                                         at the Jenkinsfile in your repo)
+#
+#  All ${...} values are environment variables injected by
+#  docker-compose.yml from your .env file. Edit .env, then restart:
+#      docker compose up -d --force-recreate jenkins
+# ============================================================
+jenkins:
+  systemMessage: |
+    🎓 Student App CI/CD — this Jenkins was configured automatically
+    with Configuration as Code (jenkins/casc/jenkins.yaml).
+    Credentials and the pipeline job were imported from your .env file.
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_USER:-admin}"
+          password: "${JENKINS_ADMIN_PASSWORD:-admin}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+
+# ──────────────────────────────────────────────────────────────
+#  Credentials — imported from .env (never hardcode secrets!)
+#  IDs must match what the Jenkinsfile expects.
+# ──────────────────────────────────────────────────────────────
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "dockerhub"
+              description: "Docker Hub username + access token (PAT)"
+              username: "${DOCKERHUB_USERNAME:-changeme}"
+              password: "${DOCKERHUB_TOKEN:-changeme}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "github-cred"
+              description: "GitHub username + Personal Access Token (PAT)"
+              username: "${GITHUB_USER:-changeme}"
+              password: "${GITHUB_PAT:-changeme}"
+          - string:
+              scope: GLOBAL
+              id: "sonar-token"
+              description: "SonarQube analysis token"
+              secret: "${SONAR_TOKEN:-changeme}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "nexus"
+              description: "Nexus Repository Manager login"
+              username: "${NEXUS_USER:-admin}"
+              password: "${NEXUS_PASSWORD:-changeme}"
+
+# ──────────────────────────────────────────────────────────────
+#  Jobs — the pipeline is CREATED automatically (Job DSL plugin).
+#  It pulls the Jenkinsfile from GIT_REPO_URL (set in .env).
+# ──────────────────────────────────────────────────────────────
+jobs:
+  - script: >
+      pipelineJob('student-app-pipeline') {
+        description('''Two-tier Student App CI/CD pipeline (auto-created by JCasC).
+      Lint → Unit Test → Build → API Test → Security Scan → SonarQube →
+      Quality Gate → Push (Docker Hub / Nexus) → Ansible Deploy (staging/production).''')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url(System.getenv('GIT_REPO_URL') ?: 'https://github.com/YOUR_GITHUB_USERNAME/Lesson11-C270-Jenkins-Docker-Ansible.git')
+                  credentials('github-cred')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(true)
+          }
+        }
+        triggers {
+          scm('H/2 * * * *')
+        }
+      }

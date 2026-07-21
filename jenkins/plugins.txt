@@ -1,0 +1,15 @@
+# Plugins pre-installed into the custom Jenkins image (jenkins/Dockerfile).
+# Versions are resolved automatically to the latest compatible releases.
+configuration-as-code
+job-dsl
+workflow-aggregator
+pipeline-stage-view
+pipeline-utility-steps
+git
+github
+docker-workflow
+credentials
+credentials-binding
+plain-credentials
+junit
+timestamper

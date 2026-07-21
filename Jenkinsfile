@@ -1,20 +1,20 @@
 // ============================================================
 //  Jenkinsfile — CI/CD for the two-tier Student app
-//  Builds BOTH images (FastAPI backend + Streamlit frontend),
-//  runs code-quality & security scans (SonarQube, Trivy, Hadolint,
-//  Bandit), tests them, pushes to Docker Hub, and deploys via Ansible.
+//  Lint → Unit Test (pytest) → Build → Smoke + API Test (Newman) →
+//  Security Scan (Trivy/OWASP) → SonarQube → Quality Gate →
+//  Push (Docker Hub + optional Nexus) → Deploy via Ansible.
 //
-//  Setup in Jenkins (one-time):
-//   1. Add a "Username with password" credential with ID 'dockerhub'
-//      (your Docker Hub username + an access token).
-//   2. Add a "Username with password" credential with ID 'github-cred'
-//      (your GitHub username + a PAT) if the repo is private.
-//   3. Add a "Secret text" credential with ID 'sonar-token'
-//      (SonarQube token — generate at User > My Account > Security).
-//   4. Create a Pipeline job → "Pipeline script from SCM" → point it at
-//      this repo so it uses this Jenkinsfile.
-//   5. When triggering the build, provide your Docker Hub username as
-//      a parameter (DOCKER_USER), or it defaults to 'your-dockerhub-username'.
+//  ✅ NO MANUAL JENKINS SETUP NEEDED — when you start Jenkins with
+//  `docker compose up -d --build jenkins`, Configuration as Code
+//  (jenkins/casc/jenkins.yaml) automatically imports from your .env:
+//   - credential 'dockerhub'    (Docker Hub username + access token)
+//   - credential 'github-cred'  (GitHub username + PAT)
+//   - credential 'sonar-token'  (SonarQube token)
+//   - credential 'nexus'        (Nexus repository login)
+//  ...and creates this pipeline job (student-app-pipeline) for you.
+//
+//  When triggering the build, provide your Docker Hub username as
+//  a parameter (DOCKER_USER), or it defaults to 'your-dockerhub-username'.
 // ============================================================
 pipeline {
     agent any
@@ -40,14 +40,25 @@ pipeline {
             defaultValue: false,
             description: 'Skip Trivy / OWASP security scans (speeds up dev builds)'
         )
+        booleanParam(
+            name: 'PUSH_TO_NEXUS',
+            defaultValue: false,
+            description: 'Also push images to the private Nexus registry (start it with: docker compose --profile nexus up -d)'
+        )
+        string(
+            name: 'NEXUS_REGISTRY',
+            defaultValue: 'localhost:8082',
+            description: 'Nexus Docker (hosted) registry host:port'
+        )
     }
 
     environment {
         BACKEND_IMAGE  = "${params.DOCKER_USER}/student-backend"
         FRONTEND_IMAGE = "${params.DOCKER_USER}/student-frontend"
         TAG            = "${BUILD_NUMBER}"
-        BRANCH_TAG     = "${BRANCH_NAME.replaceAll('/', '-')}-${BUILD_NUMBER}"
+        BRANCH_TAG     = "${(env.BRANCH_NAME ?: 'main').replaceAll('/', '-')}-${BUILD_NUMBER}"
         SONAR_HOST_URL = 'http://sonarqube:9000'
+        CICD_NET       = 'cicd-net'   // compose network where sonarqube lives
     }
 
     triggers {
@@ -133,7 +144,27 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 3 — Build Images (parallel)
+        //  STAGE 3 — Unit Tests (pytest)
+        // ═════════════════════════════════════════════════════
+        stage('Unit Tests (pytest)') {
+            steps {
+                echo 'Running backend unit tests with pytest (FastAPI TestClient)...'
+                sh '''
+                    docker run --rm -v "$PWD:/work" -w /work/backend \
+                        python:3.11-slim bash -c "\
+                            pip install -q -r requirements.txt -r requirements-dev.txt && \
+                            pytest -v --junitxml=/work/pytest-report.xml"
+                '''
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'pytest-report.xml'
+                }
+            }
+        }
+
+        // ═════════════════════════════════════════════════════
+        //  STAGE 4 — Build Images (parallel)
         // ═════════════════════════════════════════════════════
         stage('Build Images') {
             parallel {
@@ -153,9 +184,9 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 4 — Functional Test
+        //  STAGE 5 — Functional / API Tests (smoke + Newman)
         // ═════════════════════════════════════════════════════
-        stage('Test Backend') {
+        stage('API Tests (smoke + Newman)') {
             steps {
                 echo 'Smoke-testing the backend API in a throwaway container'
                 script {
@@ -176,14 +207,28 @@ pipeline {
                     sh 'docker run --rm --network testnet curlimages/curl:8.1.2 -sS http://apitest:8000/ | grep "Student API is running"'
                     sh 'docker run --rm --network testnet curlimages/curl:8.1.2 -sS http://apitest:8000/students | grep "Alice"'
                     sh 'docker run --rm --network testnet curlimages/curl:8.1.2 -sS http://apitest:8000/stats | grep "average_grade"'
+                    echo 'Running the full API test suite with Newman (Postman CLI)...'
+                    sh '''
+                        docker run --rm --network testnet \
+                            -v "$PWD/tests/postman:/etc/newman" \
+                            postman/newman:alpine run student-api.postman_collection.json \
+                            --env-var baseUrl=http://apitest:8000 \
+                            --reporters cli,junit \
+                            --reporter-junit-export /etc/newman/newman-report.xml
+                    '''
                     sh 'docker rm -f apitest'
                     sh 'docker network rm testnet 2>/dev/null || true'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'tests/postman/newman-report.xml'
                 }
             }
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 5 — Security & Vulnerability Scanning
+        //  STAGE 6 — Security & Vulnerability Scanning
         // ═════════════════════════════════════════════════════
         stage('Security Vulnerability Scan') {
             when {
@@ -247,7 +292,7 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 6 — SonarQube Code Quality Analysis
+        //  STAGE 7 — SonarQube Code Quality Analysis
         // ═════════════════════════════════════════════════════
         stage('SonarQube Analysis') {
             when {
@@ -264,6 +309,7 @@ pipeline {
                         )]) {
                             sh """
                                 docker run --rm \
+                                    --network ${CICD_NET} \
                                     -v "$PWD:/usr/src" \
                                     -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
                                     -e SONAR_TOKEN="${SONAR_TOKEN}" \
@@ -286,7 +332,7 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 7 — Quality Gate (decides whether to proceed)
+        //  STAGE 8 — Quality Gate (decides whether to proceed)
         // ═════════════════════════════════════════════════════
         stage('Quality Gate') {
             steps {
@@ -311,7 +357,7 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 8 — Push to Docker Hub
+        //  STAGE 9 — Push to Docker Hub
         // ═════════════════════════════════════════════════════
         stage('Push to Docker Hub') {
             when {
@@ -337,7 +383,32 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 9 — Local Smoke Deploy
+        //  STAGE 10 — Push to Nexus (private registry, optional)
+        //  Start Nexus first:  docker compose --profile nexus up -d
+        //  Create a docker (hosted) repo with HTTP connector on 8082.
+        // ═════════════════════════════════════════════════════
+        stage('Push to Nexus') {
+            when {
+                expression { params.PUSH_TO_NEXUS }
+            }
+            steps {
+                echo "Pushing images to the private Nexus registry at ${params.NEXUS_REGISTRY}"
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus',
+                    usernameVariable: 'NX_USER',
+                    passwordVariable: 'NX_PASS')]) {
+                    sh "echo \"\$NX_PASS\" | docker login ${params.NEXUS_REGISTRY} -u \"\$NX_USER\" --password-stdin"
+                    sh "docker tag ${BACKEND_IMAGE}:${TAG} ${params.NEXUS_REGISTRY}/student-backend:${TAG}"
+                    sh "docker tag ${FRONTEND_IMAGE}:${TAG} ${params.NEXUS_REGISTRY}/student-frontend:${TAG}"
+                    sh "docker push ${params.NEXUS_REGISTRY}/student-backend:${TAG}"
+                    sh "docker push ${params.NEXUS_REGISTRY}/student-frontend:${TAG}"
+                    sh "docker logout ${params.NEXUS_REGISTRY}"
+                }
+            }
+        }
+
+        // ═════════════════════════════════════════════════════
+        //  STAGE 11 — Local Smoke Deploy
         // ═════════════════════════════════════════════════════
         stage('Deploy (local smoke run)') {
             steps {
@@ -357,7 +428,7 @@ pipeline {
         }
 
         // ═════════════════════════════════════════════════════
-        //  STAGE 10 — Ansible Deploy (optional)
+        //  STAGE 12 — Ansible Deploy (staging / production)
         // ═════════════════════════════════════════════════════
         stage('Deploy via Ansible') {
             when {
@@ -403,7 +474,7 @@ pipeline {
         }
         cleanup {
             // Remove scan reports from workspace after archiving
-            sh 'rm -f bandit-report.html trivy-*-report.json 2>/dev/null || true'
+            sh 'rm -f bandit-report.html trivy-*-report.json pytest-report.xml tests/postman/newman-report.xml 2>/dev/null || true'
             sh 'rm -rf owasp-report 2>/dev/null || true'
         }
     }

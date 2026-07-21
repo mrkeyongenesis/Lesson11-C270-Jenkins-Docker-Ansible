@@ -1,0 +1,214 @@
+{
+  "info": {
+    "name": "Student API — End-to-End API Tests",
+    "description": "Functional API tests for the FastAPI backend. Run with the open-source Newman CLI:\n\n  docker run --rm --network appnet -v \"$PWD/tests/postman:/etc/newman\" postman/newman:alpine run student-api.postman_collection.json --env-var baseUrl=http://backend:8000\n\nOr against staging: --env-var baseUrl=http://host.docker.internal:8001",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('API reports OK', () => {",
+              "    pm.expect(pm.response.json().status).to.eql('OK');",
+              "});",
+              "pm.test('Responds in under 1s', () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. List all students",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/students"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('At least 5 students returned', () => {",
+              "    pm.expect(pm.response.json().total).to.be.at.least(5);",
+              "});",
+              "pm.test('Each student has id, name, grade, subject', () => {",
+              "    const s = pm.response.json().students[0];",
+              "    pm.expect(s).to.have.all.keys('id', 'name', 'grade', 'subject');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Create a student (POST)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/students",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Newman\", \"grade\": 88, \"subject\": \"DevOps\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+              "pm.test('Student was created with an id', () => {",
+              "    const created = pm.response.json().student;",
+              "    pm.expect(created.name).to.eql('Newman');",
+              "    pm.expect(created.id).to.be.a('number');",
+              "    pm.collectionVariables.set('createdId', created.id);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Read back the new student",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/students/{{createdId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('It is the student we just created', () => {",
+              "    pm.expect(pm.response.json().name).to.eql('Newman');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Update the student (PUT)",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/students/{{createdId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"grade\": 100}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Grade was updated to 100', () => {",
+              "    pm.expect(pm.response.json().student.grade).to.eql(100);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Search by subject",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/search?subject=DevOps"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Search finds the DevOps student', () => {",
+              "    pm.expect(pm.response.json().count).to.be.at.least(1);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Delete the student (cleanup)",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/students/{{createdId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Deletion is confirmed', () => {",
+              "    pm.expect(pm.response.json().message).to.include('deleted');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Stats still consistent",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/stats"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Stats fields are present', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body).to.have.keys('total_students', 'average_grade', 'highest_grade', 'lowest_grade');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

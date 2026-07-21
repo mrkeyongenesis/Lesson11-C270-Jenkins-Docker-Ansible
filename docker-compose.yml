@@ -1,17 +1,26 @@
-version: '3.8'
-
-# Run the whole app locally with one command:
-#   docker compose up --build
-# Then open port 8501 (UI), 8000/docs (API), and 8080 (Jenkins) in the PORTS tab.
+# ============================================================
+#  Student App — full CI/CD lab in one file
 #
-# For the full CI/CD experience with code quality scanning:
-#   docker compose up --build -d sonarqube   # start SonarQube first
-#   docker compose up --build                # start everything else
+#  1. Copy .env.example → .env and fill in your tokens (PATs).
+#  2. Core stack (app + Jenkins + SonarQube):
+#        docker compose up -d --build
+#  3. Optional extras (heavier — start when the lesson needs them):
+#        docker compose --profile nexus up -d          # Nexus artifact repo
+#        docker compose --profile monitoring up -d     # Prometheus + Grafana + cAdvisor
+#
+#  Jenkins is configured AUTOMATICALLY (plugins, credentials, pipeline
+#  job) from your .env via jenkins/casc/jenkins.yaml — no setup wizard.
+# ============================================================
 services:
+  # No fixed container_name here: the pipeline's smoke-deploy stage uses
+  # containers literally named "backend"/"frontend", and fixed names would
+  # make it delete these dev containers. Other services still reach the
+  # backend as "backend" via the compose network's service-name DNS.
   backend:
     build: ./backend
     ports:
       - "8000:8000"
+    networks: [cicd]
 
   frontend:
     build: ./frontend
@@ -22,27 +31,42 @@ services:
       API_URL: "http://backend:8000"
     depends_on:
       - backend
+    networks: [cicd]
 
-  # ── Jenkins CI/CD Server ──────────────────────────────────
+  # ── Jenkins CI/CD Server (auto-configured, no setup wizard) ─
   jenkins:
-    image: jenkins/jenkins:lts       # use LTS for stability
+    build: ./jenkins
+    container_name: jenkins
     ports:
       - "8080:8080"
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
+      - ./jenkins/casc:/var/jenkins_home/casc_configs:ro
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      JAVA_OPTS: "-Xmx1024m -Xms512m"
-    # Note: Jenkins will ask you to unlock with an admin password on first startup.
-    # Run: docker logs jenkins to find the initial admin password.
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false -Xmx1024m -Xms512m"
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc_configs
+      # ↓ Everything below is imported into Jenkins by JCasC (credentials + job)
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:-admin}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:-admin}
+      DOCKERHUB_USERNAME: ${DOCKERHUB_USERNAME:-}
+      DOCKERHUB_TOKEN: ${DOCKERHUB_TOKEN:-}
+      GITHUB_USER: ${GITHUB_USER:-}
+      GITHUB_PAT: ${GITHUB_PAT:-}
+      GIT_REPO_URL: ${GIT_REPO_URL:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      NEXUS_USER: ${NEXUS_USER:-admin}
+      NEXUS_PASSWORD: ${NEXUS_PASSWORD:-}
     depends_on:
       - sonarqube
+    networks: [cicd]
 
   # ── SonarQube — Code Quality & Static Analysis ────────────
   # Open http://localhost:9000 (default admin: admin / admin)
   sonarqube:
-    image: sonarqube:community       # free & open source
+    image: sonarqube:community       # free & open source (LGPL)
+    container_name: sonarqube
     ports:
       - "9000:9000"
     volumes:
@@ -54,9 +78,80 @@ services:
       # For demo use embedded H2 database (default).
       # Production: switch to PostgreSQL (see docs).
     mem_limit: 2g                    # SonarQube needs at least 2 GB
+    networks: [cicd]
+
+  # ── Nexus Repository Manager — private artifact/Docker registry ─
+  # Start with:  docker compose --profile nexus up -d
+  # UI: http://localhost:8081 — Docker registry: localhost:8082
+  # First-boot admin password:  docker exec nexus cat /nexus-data/admin.password
+  nexus:
+    image: sonatype/nexus3:latest    # free & open source (EPL)
+    container_name: nexus
+    profiles: ["nexus"]
+    ports:
+      - "8081:8081"                  # web UI
+      - "8082:8082"                  # docker (hosted) registry connector
+    volumes:
+      - nexus_data:/nexus-data
+    environment:
+      INSTALL4J_ADD_VM_PARAMS: "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=2g"
+    networks: [cicd]
+
+  # ── Monitoring: Prometheus + Grafana + cAdvisor ───────────
+  # Start with:  docker compose --profile monitoring up -d
+  prometheus:
+    image: prom/prometheus:latest    # open source (Apache 2.0)
+    container_name: prometheus
+    profiles: ["monitoring"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach staging/prod backends on the host
+    networks: [cicd]
+
+  grafana:
+    image: grafana/grafana-oss:latest  # open source (AGPL v3)
+    container_name: grafana
+    profiles: ["monitoring"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    depends_on:
+      - prometheus
+    networks: [cicd]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest  # open source (Apache 2.0)
+    container_name: cadvisor
+    profiles: ["monitoring"]
+    ports:
+      - "8085:8080"                  # 8085 on host (8080 is taken by Jenkins)
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [cicd]
+
+networks:
+  # Fixed name so Jenkinsfile stages can attach throwaway containers
+  # (e.g. sonar-scanner) with:  docker run --network cicd-net ...
+  cicd:
+    name: cicd-net
 
 volumes:
   jenkins_home:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:
+  nexus_data:
+  prometheus_data:
+  grafana_data:

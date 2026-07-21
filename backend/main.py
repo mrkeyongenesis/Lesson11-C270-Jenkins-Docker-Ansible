@@ -6,6 +6,7 @@
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 # ── 1. Create the app ────────────────────────────────────────
@@ -14,6 +15,10 @@ app = FastAPI(
     description="A simple API to learn REST concepts",
     version="1.0.0",
 )
+
+# Expose Prometheus metrics at GET /metrics (request counts, latency, errors).
+# Prometheus scrapes this endpoint — see monitoring/prometheus.yml.
+Instrumentator().instrument(app).expose(app)
 
 # ── 2. In-memory "database" (just a Python list) ─────────────
 students_db: list[dict[str, Any]] = [
